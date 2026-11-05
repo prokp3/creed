@@ -61,6 +61,8 @@
 <svelte:window {onhashchange} />
 <svelte:document {onvisibilitychange} />
 
+<div class="top-edge" aria-hidden="true"></div>
+
 {#if auth.status === 'signed-in'}
   {#if visited.has('today')}
     <Today active={route.screen === 'today'} {freshness} />
@@ -98,6 +100,16 @@
 {/if}
 
 <style>
+  /* iOS 26 blurs the top of the page unless a full-width box pinned to the edge paints one solid colour. */
+  .top-edge {
+    position: sticky;
+    z-index: 3;
+    top: 0;
+    flex: none;
+    height: 12px;
+    background: var(--bg);
+  }
+
   .unreachable {
     flex: 1;
     justify-content: center;
@@ -105,6 +117,8 @@
   }
 
   nav {
+    position: sticky;
+    bottom: 0;
     flex: none;
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));

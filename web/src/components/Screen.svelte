@@ -2,7 +2,6 @@
   // One tab's scrolling page. The bib sits at the top and scrolls away, then a slim version takes over,
   // so the countdown stays on screen without using a fifth of it. With `fill`, as on the map, the page doesn't
   // scroll: the slim countdown stays put and the content takes the rest of the screen.
-  // Nothing ever scrolls behind the status bar, because iOS blurs whatever passes under it.
   import Bib from './Bib.svelte';
   import { race } from '../lib/race.svelte.js';
 
@@ -76,7 +75,6 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
-    padding-top: 8px;
     padding-bottom: 20px;
   }
 

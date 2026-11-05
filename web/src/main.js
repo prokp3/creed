@@ -8,9 +8,7 @@ import './app.css';
 import { mount } from 'svelte';
 import App from './App.svelte';
 import { installHaptics } from './lib/haptics.js';
-import { fillTheScreen } from './lib/viewport.js';
 
-fillTheScreen();
 installHaptics();
 // iOS only shows the pressed look on buttons once a page listens for touches.
 document.addEventListener('touchstart', () => {}, { passive: true });
