@@ -2,7 +2,7 @@
 
 A personal triathlon dashboard built from your own Garmin data, installed on your iPhone's home screen as a web app.
 
-**Status: early development.** The data-availability probe, the Garmin sync, the metrics, the API, the screens and passkey sign-in work on a local computer. Sign-in has been tested with a simulated passkey, not yet on a real iPhone. Notifications, the account-export importer and the full deploy guide will be added here as they are built.
+**Status: early development.** The data-availability probe, the Garmin sync, the metrics, the API, the screens and passkey sign-in work on a local computer. Sign-in has been tested with a simulated passkey and with Windows Hello, not yet on a real iPhone. The scheduled sync, notifications and the account-export importer will be added here as they are built.
 
 ## Set up for development
 
@@ -95,6 +95,34 @@ Creed signs you in with a passkey, which on an iPhone means Face ID. A passkey i
 - The app on your home screen still points at the old address, so delete it and add it again from the new one.
 
 To get back in, set `CREED_ORIGIN` to the new address, open it, and use your recovery code or the setup secret to create a new passkey. Neither of those is tied to the address. Then remove the old passkey in Settings.
+
+## Deploy your own copy
+
+This runs free on Vercel's Hobby plan, which is for personal, non-commercial use, and Supabase's Free plan. The scheduled sync isn't built yet, so for now run `.venv/Scripts/python -m creed.sync` on your computer to bring in new data.
+
+1. Follow "Sync your Garmin data" above, so your database has its tables and data.
+2. Fork this repo. On [Vercel](https://vercel.com), choose **Add New**, then **Project**, and import your fork.
+3. Choose a **Project Name**. It decides your address, `https://<name>.vercel.app`, and passkeys are tied to that address for good, so pick one you'll keep. Leave the other settings alone, because `vercel.json` sets them, and deploy. The site will load but can't sign you in yet.
+4. Check the address under **Domains** on the project page. If the name was taken, Vercel may have changed it.
+5. Make two long secrets. Run this twice and keep the results in a password manager:
+
+   ```bash
+   python -c "import secrets; print(secrets.token_urlsafe(32))"
+   ```
+6. In **Settings**, then **Environment Variables**, add these for **Production only**:
+
+   | Name | Value |
+   |---|---|
+   | `DATABASE_URL` | Your Supabase Transaction pooler string |
+   | `GARMIN_PERSONAL_API_KEY` | Your Garmin key |
+   | `CREED_ORIGIN` | Your address from step 4, starting with `https://` and with no slash at the end |
+   | `CREED_SETUP_SECRET` | The first secret |
+   | `CREED_CRON_SECRET` | The second secret |
+7. In **Deployments**, open the latest one and choose **Redeploy**. New settings only apply to new deployments.
+8. Open `https://<name>.vercel.app/api/health`. It should say `{"status":"ok"}`.
+9. On your iPhone, open your address in Safari, tap **Share**, then **Add to Home Screen**. Open Creed from the home screen, enter the setup secret, create your passkey with Face ID, and save the recovery code.
+
+`vercel.json` runs the API in Mumbai (`bom1`), next to a Mumbai database. If your database is somewhere else, change `regions` to match.
 
 ## How the data is stored
 

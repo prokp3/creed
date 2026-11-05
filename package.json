@@ -1,0 +1,8 @@
+{
+  "name": "creed",
+  "private": true,
+  "description": "Only here so Vercel builds the site in web/ the standard way, and to set the Node version it uses.",
+  "engines": {
+    "node": "22.x"
+  }
+}
