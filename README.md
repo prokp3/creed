@@ -2,7 +2,7 @@
 
 A personal triathlon dashboard built from your own Garmin data, installed on your iPhone's home screen as a web app.
 
-**Status: early development.** The data-availability probe, the Garmin sync and the metrics work. The API, dashboard, login, notifications and full deploy guide will be added here as they are built.
+**Status: early development.** The data-availability probe, the Garmin sync, the metrics, the API and the screens work on a local computer. Login, notifications, the account-export importer and the full deploy guide will be added here as they are built. **Don't deploy this publicly until login exists.**
 
 ## Set up for development
 
@@ -37,6 +37,32 @@ Run all the tests. They start their own temporary Postgres, so they need no acco
    ```bash
    .venv/Scripts/python -m creed.sync
    ```
+
+## Run the app on your computer
+
+This needs [Node.js](https://nodejs.org) as well, and a database filled by the steps above. Install the web tools once:
+
+```bash
+npm --prefix web install
+```
+
+Start the API and leave it running. It listens on this computer only and creates a random local token in `.dev-token`:
+
+```bash
+.venv/Scripts/python tools/dev_api.py
+```
+
+In a second terminal, start the web app, then open http://127.0.0.1:5173:
+
+```bash
+npm --prefix web run dev
+```
+
+Run the web tests with:
+
+```bash
+npm --prefix web test
+```
 
 ## How the data is stored
 

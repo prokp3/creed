@@ -90,6 +90,7 @@ class MockGarmin:
         always_429: bool = False,
         hrv_renamed: bool = False,
         file_status: int | None = None,
+        hrv_varies: bool = False,
     ) -> None:
         self.today = today
         self.history_days = history_days
@@ -105,6 +106,7 @@ class MockGarmin:
         self.always_429 = always_429
         self.hrv_renamed = hrv_renamed
         self.file_status = file_status
+        self.hrv_varies = hrv_varies
         self.tokens_issued = 0
         self.data_requests = 0
         self.log: list[str] = []
@@ -284,7 +286,8 @@ class MockGarmin:
                     rows = []
                     for d in self._dates(match.group(1), match.group(2)):
                         if (mock.today - d).days <= mock.hrv_days and mock._worn(d):
-                            rows.append({"calendarDate": d.isoformat(), "lastNightAvg": 55, "lastNight5MinHigh": 80,
+                            average = 50 + (mock.today - d).days % 11 if mock.hrv_varies else 55
+                            rows.append({"calendarDate": d.isoformat(), "lastNightAvg": average, "lastNight5MinHigh": 80,
                                          "weeklyAvg": 54, "status": "BALANCED",
                                          "baseline": {"lowUpper": 40, "balancedLow": 45, "balancedUpper": 65, "markerValue": 0.5}})
                     return self._json({"hrvSummaries": rows, "userProfilePk": PLANTED_PROFILE_ID}) if rows else self._send(204)

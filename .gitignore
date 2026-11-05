@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+.dev-token
 *.key
 *.pem
 
@@ -26,7 +27,9 @@ build/
 .ruff_cache/
 
 # Tooling
+.claude/
 .vercel/
 node_modules/
+web/dist/
 .DS_Store
 Thumbs.db

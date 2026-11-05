@@ -1,0 +1,250 @@
+/* Creed's theme. Dark only. Red means attention, and the race bib's band is its one brand use. */
+:root {
+  color-scheme: dark;
+  --bg: #08080a;
+  --card: #141417;
+  --line: #26262c;
+  --track: #2a2a30;
+  --border: #3a3a42;
+  --ink: #ffffff;
+  --ink-2: #b9b9c2;
+  --ink-3: #92929c;
+  --attention: #ff3b47;
+  --brand: #d3122a;
+  --paper: #f4f3ef;
+  --paper-ink: #0a0a0b;
+  --paper-ink-2: #4a4a50;
+  --swim: #38bdf8;
+  --bike: #ffc233;
+  --run: #3ddc97;
+  --display: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  --body: Barlow, Arial, sans-serif;
+  --gutter: 16px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: var(--bg);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  color: var(--ink);
+  font: 400 14px/1.35 var(--body);
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+#app {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+input,
+select,
+button {
+  font: inherit;
+  color: inherit;
+}
+
+input,
+select {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.pressable {
+  transition: opacity 0.12s ease;
+}
+
+.pressable:active {
+  opacity: 0.6;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+.section-heading {
+  font: 700 15px/1.2 var(--display);
+  letter-spacing: 0.08em;
+  color: var(--ink-2);
+  text-transform: uppercase;
+}
+
+.page-heading {
+  font: 800 24px/1.2 var(--display);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.card {
+  background: var(--card);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--card);
+  border-radius: 8px;
+  padding: 10px 12px;
+  min-width: 0;
+}
+
+.tile-label {
+  font: 700 14px/1.2 var(--display);
+  letter-spacing: 0.05em;
+  color: var(--ink-2);
+  text-transform: uppercase;
+}
+
+.tile-value {
+  font: 800 34px/1.05 var(--display);
+}
+
+.tag {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+}
+
+.note {
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gutter {
+  padding-left: var(--gutter);
+  padding-right: var(--gutter);
+}
+
+.attention {
+  color: var(--attention);
+}
+
+.swim {
+  --discipline: var(--swim);
+  color: var(--swim);
+}
+
+.bike {
+  --discipline: var(--bike);
+  color: var(--bike);
+}
+
+.run {
+  --discipline: var(--run);
+  color: var(--run);
+}
+
+.not-enough {
+  font: 800 22px/1.2 var(--display);
+  text-transform: uppercase;
+}
+
+.segment {
+  height: 44px;
+  min-width: 54px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-2);
+  font: 700 15px/1 var(--display);
+  letter-spacing: 0.04em;
+}
+
+.segment[aria-pressed='true'] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--bg);
+}
+
+.split-bar {
+  display: flex;
+  gap: 2px;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.field {
+  height: 40px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--ink);
+  /* iOS zooms the page when a field's text is under 16px. */
+  font-size: 16px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
