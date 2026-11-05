@@ -1,0 +1,29 @@
+# Secrets: never commit
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# Personal data: never commit
+probe-output/
+data/
+exports/
+*.fit
+*.FIT
+*.zip
+
+# The logo is supplied after deployment and is not part of the public repo
+public/brand/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
+# Tooling
+.vercel/
+node_modules/
+.DS_Store
+Thumbs.db
