@@ -1,40 +1,45 @@
 <script>
+  import { slide } from 'svelte/transition';
+  import { revealMs } from '../lib/motion.js';
+
   let { why, confidence = null, title = 'Why this number' } = $props();
+  let open = $state(false);
 </script>
 
 {#if why}
-  <details class="why">
-    <summary class="pressable">{title}</summary>
-    <div class="body">
-      <p><b>Formula.</b> {why.formula}</p>
-      <p><b>Inputs.</b> {why.inputs}</p>
-      <p><b>Window.</b> {why.window}</p>
-      {#if confidence}
-        <p><b>Confidence.</b> {confidence[0].toUpperCase() + confidence.slice(1)}.</p>
-      {/if}
-      <p><b>Source.</b> {why.citation}</p>
-      {#if why.note}
-        <p class="quiet">{why.note}</p>
-      {/if}
-    </div>
-  </details>
+  <div class="why">
+    <button class="toggle pressable" aria-expanded={open} onclick={() => (open = !open)}>{title}</button>
+    {#if open}
+      <div class="body" transition:slide={{ duration: revealMs() }}>
+        <p><b>Formula.</b> {why.formula}</p>
+        <p><b>Inputs.</b> {why.inputs}</p>
+        <p><b>Window.</b> {why.window}</p>
+        {#if confidence}
+          <p><b>Confidence.</b> {confidence[0].toUpperCase() + confidence.slice(1)}.</p>
+        {/if}
+        <p><b>Source.</b> {why.citation}</p>
+        {#if why.note}
+          <p class="quiet">{why.note}</p>
+        {/if}
+      </div>
+    {/if}
+  </div>
 {/if}
 
 <style>
-  summary {
+  .toggle {
     display: flex;
     align-items: center;
+    width: 100%;
     min-height: 44px;
-    list-style: none;
+    padding: 0;
+    border: 0;
+    background: transparent;
     color: var(--ink-2);
     font: 700 14px/1 var(--display);
     letter-spacing: 0.05em;
     text-transform: uppercase;
-    cursor: pointer;
-  }
-
-  summary::-webkit-details-marker {
-    display: none;
+    text-align: left;
   }
 
   .body {

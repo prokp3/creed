@@ -126,7 +126,7 @@
   onDestroy(() => clearTimeout(refreshTimer));
 </script>
 
-<main class="page">
+<main class="page" data-no-haptics>
   <div class="brand">
     <img src="/icons/icon-192.png" alt="" width="72" height="72" />
     <h1>Creed</h1>

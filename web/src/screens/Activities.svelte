@@ -13,9 +13,9 @@
   const PAGE = 30;
   const FILTERS = [
     [null, 'All'],
-    ['swim', 'Swim'],
-    ['bike', 'Bike'],
     ['run', 'Run'],
+    ['bike', 'Bike'],
+    ['swim', 'Swim'],
   ];
 
   let filter = $state(null);
@@ -55,7 +55,7 @@
 
   function detail(row) {
     const parts = [distance(row.discipline, row.distance_m)];
-    if (row.avg_speed_mps && ['swim', 'bike', 'run'].includes(row.discipline)) {
+    if (row.avg_speed_mps && ['run', 'bike', 'swim'].includes(row.discipline)) {
       parts.push(pace(row.discipline, row.avg_speed_mps));
     }
     // Swim HR isn't used anywhere because wrist HR is unreliable in water.

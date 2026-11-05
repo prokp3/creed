@@ -3,11 +3,13 @@
   // None of it exists until you're signed in, and signing out removes it, numbers included.
   import { onMount } from 'svelte';
   import { auth, checkAuth } from './lib/auth.svelte.js';
+  import { changeScreen, motionBetween } from './lib/motion.js';
   import { refreshRace } from './lib/race.svelte.js';
   import Today from './screens/Today.svelte';
   import InDepth from './screens/InDepth.svelte';
   import Activities from './screens/Activities.svelte';
   import ActivityDetail from './screens/ActivityDetail.svelte';
+  import ActivityMap from './screens/ActivityMap.svelte';
   import Settings from './screens/Settings.svelte';
   import SignIn from './screens/SignIn.svelte';
 
@@ -18,8 +20,9 @@
   ];
 
   function parse(hash) {
-    const [name, id] = hash.replace(/^#\/?/, '').split('/');
+    const [name, id, part] = hash.replace(/^#\/?/, '').split('/');
     if (name === 'settings') return { screen: 'settings', tab: null };
+    if (name === 'activities' && id && part === 'map') return { screen: 'activity-map', tab: 'activities', id };
     if (name === 'activities' && id) return { screen: 'activity', tab: 'activities', id };
     if (TABS.some((t) => t.id === name)) return { screen: name, tab: name };
     return { screen: 'today', tab: 'today' };
@@ -30,8 +33,11 @@
   let freshness = $state(0);
 
   function onhashchange() {
-    route = parse(location.hash);
-    visited = new Set([...visited, route.screen]);
+    const next = parse(location.hash);
+    changeScreen(motionBetween(route.screen, next.screen), () => {
+      route = next;
+      visited = new Set([...visited, next.screen]);
+    });
   }
 
   // Coming back to the app after a while should show current numbers.
@@ -68,6 +74,9 @@
   {#if route.screen === 'activity'}
     <ActivityDetail id={route.id} />
   {/if}
+  {#if route.screen === 'activity-map'}
+    <ActivityMap id={route.id} />
+  {/if}
   {#if visited.has('settings')}
     <Settings active={route.screen === 'settings'} onsaved={refreshRace} {freshness} />
   {/if}
@@ -102,6 +111,7 @@
     padding-bottom: var(--safe-bottom);
     border-top: 1px solid var(--line);
     background: var(--bg);
+    view-transition-name: tabbar;
   }
 
   a {
@@ -115,6 +125,7 @@
     font: 700 16px/1 var(--display);
     letter-spacing: 0.06em;
     text-transform: uppercase;
+    transition: color 0.18s ease, border-color 0.18s ease, opacity 0.12s ease, transform 0.18s var(--ease);
   }
 
   a.current {

@@ -1,8 +1,9 @@
 """A small FIT reader for structure, field coverage and the samples the metrics need.
 
 read_fit keeps no field values, and read_samples returns only heart rate, speed, distance
-and power. Position is never decoded. Bad input yields a parse error, never a crash. Files
-are read in memory and never extracted to disk.
+and power. Position is decoded only by read_track, which runs when a signed-in person opens
+an activity's map, and is never stored or used for anything else. Bad input yields a parse
+error, never a crash. Files are read in memory and never extracted to disk.
 """
 from __future__ import annotations
 
@@ -43,6 +44,9 @@ FIT_SESSION_FIELDS = {
 FIT_MSG_RECORD, FIT_MSG_SESSION, FIT_MSG_PHYSIO = 20, 18, 140
 FIELD_HEART_RATE, FIELD_DISTANCE, FIELD_SPEED, FIELD_POWER, FIELD_ENHANCED_SPEED = 3, 5, 6, 7, 73
 STREAM_FIELDS = {FIELD_HEART_RATE, FIELD_DISTANCE, FIELD_SPEED, FIELD_POWER, FIELD_ENHANCED_SPEED}
+FIELD_POSITION_LAT, FIELD_POSITION_LONG = 0, 1
+POSITION_FIELDS = {FIELD_POSITION_LAT, FIELD_POSITION_LONG}
+DEGREES_PER_SEMICIRCLE = 180 / 2**31  # FIT stores positions as signed 32-bit "semicircles".
 
 
 @dataclass(frozen=True)
@@ -56,8 +60,17 @@ class Sample:
     power: int | None = None
 
 
+@dataclass(frozen=True)
+class TrackPoint:
+    """One GPS position the watch recorded."""
+
+    timestamp: int  # Seconds since the FIT epoch.
+    latitude: float
+    longitude: float
+
+
 def _walk_fit(data: bytes, messages: Counter, valid_fields: dict[int, Counter], record_times: list[int],
-              samples: list[Sample] | None = None) -> dict[str, Any]:
+              samples: list[Sample] | None = None, track: list[TrackPoint] | None = None) -> dict[str, Any]:
     result: dict[str, Any] = {"parse_error": None, "truncated": False, "fit_files": 0}
     pos = 0
     try:
@@ -73,7 +86,7 @@ def _walk_fit(data: bytes, messages: Counter, valid_fields: dict[int, Counter], 
             if end > len(data):
                 result["truncated"] = True
                 end = len(data)
-            _read_fit_records(data, start, end, messages, valid_fields, record_times, samples)
+            _read_fit_records(data, start, end, messages, valid_fields, record_times, samples, track)
             result["fit_files"] += 1
             pos = end + 2
         if result["fit_files"] == 0:
@@ -88,6 +101,13 @@ def read_samples(data: bytes) -> tuple[list[Sample], str | None]:
     samples: list[Sample] = []
     result = _walk_fit(data, Counter(), defaultdict(Counter), [], samples)
     return samples, result["parse_error"]
+
+
+def read_track(data: bytes) -> tuple[list[TrackPoint], str | None]:
+    """The recording's GPS positions in degrees, and a parse error if the file couldn't be read in full."""
+    track: list[TrackPoint] = []
+    result = _walk_fit(data, Counter(), defaultdict(Counter), [], None, track)
+    return track, result["parse_error"]
 
 
 def unzip_fit(content: bytes) -> bytes | None:
@@ -137,6 +157,7 @@ def _read_fit_records(
     valid_fields: dict[int, Counter],
     record_times: list[int],
     samples: list[Sample] | None = None,
+    track: list[TrackPoint] | None = None,
 ) -> None:
     definitions: dict[int, tuple[int, str, list[tuple[int, int, int]], int]] = {}
     last_ts: int | None = None
@@ -184,6 +205,8 @@ def _read_fit_records(
                     ts = int.from_bytes(raw, byteorder)
                 elif samples is not None and global_num == FIT_MSG_RECORD and num in STREAM_FIELDS:
                     values[num] = int.from_bytes(raw, byteorder)
+                elif track is not None and global_num == FIT_MSG_RECORD and num in POSITION_FIELDS:
+                    values[num] = int.from_bytes(raw, byteorder, signed=True)
         p += dev_size
         if ts is None and compressed_offset is not None and last_ts is not None:
             ts = (last_ts & ~0x1F) | compressed_offset
@@ -195,6 +218,9 @@ def _read_fit_records(
                 record_times.append(ts)
                 if samples is not None:
                     samples.append(_sample(ts, values))
+                if track is not None and POSITION_FIELDS <= values.keys():
+                    track.append(TrackPoint(ts, values[FIELD_POSITION_LAT] * DEGREES_PER_SEMICIRCLE,
+                                            values[FIELD_POSITION_LONG] * DEGREES_PER_SEMICIRCLE))
 
 
 def _sample(ts: int, values: dict[int, int]) -> Sample:

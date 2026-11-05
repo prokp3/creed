@@ -19,7 +19,7 @@ LOW_RECOVERY = 34
 SHORT_SLEEP_PERFORMANCE = 0.85
 RESTING_LOOKBACK_DAYS = 3
 RESTING_BASELINE_DAYS = 28
-DISCIPLINES = ("swim", "bike", "run")
+DISCIPLINES = ("run", "bike", "swim")
 
 
 def metric_json(result: MetricResult) -> dict[str, Any]:

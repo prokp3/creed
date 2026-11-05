@@ -60,5 +60,13 @@ def test_other_sites_cannot_frame_the_app_or_inject_scripts():
     assert headers["Referrer-Policy"] == "no-referrer"
 
 
+def test_the_only_outside_site_the_app_may_reach_is_the_map_provider():
+    policy = security_headers()["Content-Security-Policy"]
+    outside = {word for word in policy.replace(";", " ").split() if word.startswith("https:") or "." in word}
+    assert outside == {"https://tiles.openfreemap.org"}
+    script_rule = next(part for part in policy.split(";") if "script-src" in part)
+    assert "openfreemap" not in script_rule
+
+
 def test_python_version_matches_what_was_tested():
     assert (ROOT / ".python-version").read_text(encoding="utf-8").strip() == "3.12"

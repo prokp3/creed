@@ -77,6 +77,19 @@
       {/if}
     </div>
 
+    {#if a.map_available}
+      <section class="gutter stack">
+        <a class="map-row pressable" href="#/activities/{id}/map">
+          <span class="map-text">
+            <span class="tile-label">Route map</span>
+            <span class="note">From your watch's GPS</span>
+          </span>
+          <Icon name="forward" size={18} />
+        </a>
+        <p class="note">OpenFreeMap supplies the map, so opening it shows them which area you're looking at.</p>
+      </section>
+    {/if}
+
     <section class="gutter stack">
       <div class="card list">
         {#each rows as [label, value] (label)}
@@ -159,6 +172,23 @@
     flex-direction: column;
     align-items: flex-end;
     color: var(--ink);
+  }
+
+  .map-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 56px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: var(--card);
+  }
+
+  .map-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
   }
 
   .list {

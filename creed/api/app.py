@@ -18,6 +18,7 @@ from creed.api.auth_routes import router as auth_router
 from creed.api.deps import Conn, Session
 from creed.db import reads
 from creed.db.store import Store
+from creed.garmin import fit, track
 from creed.garmin.client import BASE_URL_ENV_VAR, DEFAULT_BASE_URL, AuthFailed, Client
 from creed.garmin.keys import resolve_api_key
 from creed.metrics import compute_all, race
@@ -49,6 +50,8 @@ async def refuse_changes_from_other_sites(request: Request, call_next):
     origin = request.headers.get("origin")
     if request.method not in SAFE_METHODS and origin is not None and not request.url.path.startswith("/api/cron/"):
         expected = os.environ.get(auth.ORIGIN_ENV_VAR, "").strip().rstrip("/")
+        if not expected:
+            return JSONResponse({"detail": f"Set {auth.ORIGIN_ENV_VAR} to this app's address first."}, status_code=503)
         if origin.rstrip("/") != expected:
             return JSONResponse({"detail": "Not allowed."}, status_code=403)
     return await call_next(request)
@@ -171,7 +174,7 @@ def activities(
     limit: Annotated[int, Query(ge=1, le=100)] = 30,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> dict[str, Any]:
-    if discipline is not None and discipline not in ("swim", "bike", "run", "multisport", "other"):
+    if discipline is not None and discipline not in ("run", "bike", "swim", "multisport", "other"):
         raise HTTPException(status_code=422, detail="Unknown discipline.")
     _saved, ctx = _context(conn)
     loads = views.activity_loads(ctx)
@@ -186,7 +189,26 @@ def activity_detail(activity_id: int, _: Session, conn: Conn) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail="No such activity.")
     _saved, ctx = _context(conn)
     load = views.activity_loads(ctx).get(activity_id, views.NO_LOAD)
-    return {**row, **load, "flags": reads.activity_flags(conn, activity_id)}
+    return {
+        **row,
+        **load,
+        "flags": reads.activity_flags(conn, activity_id),
+        "map_available": track.can_have_map(row["discipline"], row["type_key"]),
+    }
+
+
+@app.get("/api/activities/{activity_id}/route")
+def activity_route(activity_id: int, _: Session, conn: Conn) -> dict[str, Any]:
+    """One run or ride's GPS line, read from its file only when someone opens its map, and never saved."""
+    row = reads.get_activity(conn, activity_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="No such activity.")
+    if not track.can_have_map(row["discipline"], row["type_key"]):
+        raise HTTPException(status_code=422, detail="Maps are for outdoor runs and rides.")
+    content = reads.activity_file(conn, activity_id)
+    data = fit.unzip_fit(content) if content else None
+    points, problem = fit.read_track(data) if data else ([], None)
+    return {"discipline": row["discipline"], "incomplete": problem is not None, **track.build_route(points)}
 
 
 @app.get("/api/data-quality")

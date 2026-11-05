@@ -94,6 +94,11 @@ def get_activity(conn: psycopg.Connection, activity_id: int) -> dict[str, Any] |
     ).fetchone()
 
 
+def activity_file(conn: psycopg.Connection, activity_id: int) -> bytes | None:
+    row = conn.execute("select content from activity_file where activity_id = %s", (activity_id,)).fetchone()
+    return bytes(row["content"]) if row else None
+
+
 def activity_flags(conn: psycopg.Connection, activity_id: int) -> list[dict[str, Any]]:
     return conn.execute(
         "select code, severity, detail from quality_flag "

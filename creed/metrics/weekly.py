@@ -1,4 +1,4 @@
-"""Weekly swim, bike and run volume and load, with each discipline's share. Weeks start on Monday."""
+"""Weekly run, bike and swim volume and load, with each discipline's share. Weeks start on Monday."""
 from __future__ import annotations
 
 from datetime import date, timedelta
@@ -6,12 +6,12 @@ from datetime import date, timedelta
 from creed.metrics import hr_params, strain
 from creed.metrics.base import COMPUTED, INSUFFICIENT, OK, MetricContext, MetricResult, Why
 
-DISCIPLINES = ("swim", "bike", "run")
+DISCIPLINES = ("run", "bike", "swim")
 WEEKS_SHOWN = 8
 
 WHY = Why(
     formula="Adds up distance, time and load for each discipline, Monday to Sunday. Share is each discipline's "
-            "part of the week's swim, bike and run load.",
+            "part of the week's run, bike and swim load.",
     inputs="Activities from Garmin, and load from the Strain metric.",
     window="This week and the previous 7.",
     citation="A plain sum, so no published method is needed. Load uses Banister 1991 and the TrainingPeaks swim formula.",
@@ -52,7 +52,7 @@ def compute(ctx: MetricContext) -> MetricResult:
 
     if not any(t["activities"] for week in weeks.values() for t in week.values()):
         return MetricResult(**base, state=INSUFFICIENT, value=None, confidence="none",
-                            reason=f"No swim, bike or run in the last {WEEKS_SHOWN} weeks.",
+                            reason=f"No run, bike or swim in the last {WEEKS_SHOWN} weeks.",
                             details={"weeks": []})
     rows = []
     for start, week in sorted(weeks.items()):

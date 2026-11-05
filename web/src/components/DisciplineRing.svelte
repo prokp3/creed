@@ -3,7 +3,7 @@
   import Icon from './Icon.svelte';
 
   let { discipline, size = 56, label = null } = $props();
-  const known = $derived(['swim', 'bike', 'run'].includes(discipline));
+  const known = $derived(['run', 'bike', 'swim'].includes(discipline));
   const border = $derived(size >= 50 ? 3 : 2);
   const icon = $derived(Math.round(size * (discipline === 'bike' ? 0.55 : 0.5)));
 </script>

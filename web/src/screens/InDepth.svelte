@@ -22,9 +22,9 @@
     ['data', 'Data quality'],
   ];
   const DISCIPLINE_PARTS = [
-    ['swim', 'Swim', 'var(--swim)'],
-    ['bike', 'Bike', 'var(--bike)'],
     ['run', 'Run', 'var(--run)'],
+    ['bike', 'Bike', 'var(--bike)'],
+    ['swim', 'Swim', 'var(--swim)'],
   ];
 
   let days = $state(90);
@@ -427,7 +427,7 @@
 
   section {
     /* Leaves room for the slim countdown when jumping to a section. */
-    scroll-margin-top: calc(var(--safe-top) + 48px);
+    scroll-margin-top: 48px;
   }
 
   .score {

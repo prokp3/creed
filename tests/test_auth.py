@@ -538,6 +538,14 @@ class TestAddress:
         assert response.status_code == 503
         assert auth.ORIGIN_ENV_VAR in response.json()["detail"]
 
+    def test_with_no_address_a_browser_is_told_what_to_set_and_nothing_runs(self, client, store, monkeypatch):
+        monkeypatch.delenv(auth.ORIGIN_ENV_VAR)
+        response = client.post("/api/auth/recover", json={"code": "anything"}, headers={"Origin": ORIGIN})
+        assert response.status_code == 503
+        assert auth.ORIGIN_ENV_VAR in response.json()["detail"]
+        assert client.put("/api/settings", json={}, headers={"Origin": ORIGIN}).status_code == 503
+        store.commit()
+
     def test_a_passkey_made_on_the_old_address_stops_working_when_it_changes(self, client, monkeypatch):
         passkey, code = set_up(client)
         monkeypatch.setenv(auth.ORIGIN_ENV_VAR, "https://new.example")

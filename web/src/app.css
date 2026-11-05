@@ -22,6 +22,8 @@
   --gutter: 16px;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+  /* The curve iOS uses for moving between screens. */
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 * {
@@ -47,12 +49,23 @@ body {
   -webkit-touch-callout: none;
 }
 
+/* Fixed to the screen, not sized from dvh: on iPhone home-screen apps dvh can come up short and leave a gap below. */
 #app {
-  height: 100dvh;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--app-height, 100%);
   display: flex;
   flex-direction: column;
   max-width: 600px;
   margin: 0 auto;
+}
+
+a,
+button,
+summary {
+  touch-action: manipulation;
 }
 
 input,
@@ -83,11 +96,74 @@ button {
 }
 
 .pressable {
-  transition: opacity 0.12s ease;
+  transition: opacity 0.12s ease, transform 0.18s var(--ease);
 }
 
 .pressable:active {
   opacity: 0.6;
+  transform: scale(0.97);
+}
+
+/* Moving between screens. The tab bar stays still while the page changes above it. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 160ms;
+}
+
+::view-transition-group(tabbar) {
+  animation: none;
+  z-index: 2;
+}
+
+::view-transition-old(tabbar) {
+  display: none;
+}
+
+::view-transition-new(tabbar) {
+  animation: none;
+}
+
+html[data-motion='push']::view-transition-old(root) {
+  animation: 340ms var(--ease) both screen-back;
+}
+
+html[data-motion='push']::view-transition-new(root) {
+  animation: 340ms var(--ease) both screen-in;
+}
+
+html[data-motion='pop']::view-transition-old(root) {
+  z-index: 1;
+  animation: 300ms var(--ease) both screen-out;
+}
+
+html[data-motion='pop']::view-transition-new(root) {
+  animation: 300ms var(--ease) both screen-forward;
+}
+
+@keyframes screen-in {
+  from {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes screen-out {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes screen-back {
+  to {
+    transform: translateX(-28%);
+    opacity: 0.4;
+  }
+}
+
+@keyframes screen-forward {
+  from {
+    transform: translateX(-28%);
+    opacity: 0.4;
+  }
 }
 
 h1,
@@ -318,6 +394,7 @@ p {
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;
+    animation: none !important;
     scroll-behavior: auto !important;
   }
 }

@@ -63,6 +63,21 @@ def build_fit() -> bytes:
     return header + body + b"\x00\x00"
 
 
+def semicircles(degrees: float | None) -> int:
+    """FIT's position unit. None gives the value a watch writes when it has no fix."""
+    return 0x7FFFFFFF if degrees is None else round(degrees * 2**31 / 180)
+
+
+def build_gps_fit(points: list[tuple[int, float | None, float | None]]) -> bytes:
+    """A FIT file holding only (seconds from the start, latitude, longitude) records."""
+    body = fit_definition(0, 20, [(253, 4, 0x86), (0, 4, 0x85), (1, 4, 0x85)])
+    base_ts = 1_000_000_000
+    for seconds, latitude, longitude in points:
+        body += bytes([0x00]) + struct.pack("<Iii", base_ts + seconds, semicircles(latitude), semicircles(longitude))
+    header = bytes([14, 0x20]) + struct.pack("<H", 2132) + struct.pack("<I", len(body)) + b".FIT" + b"\x00\x00"
+    return header + body + b"\x00\x00"
+
+
 def build_activity_zip() -> bytes:
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as archive:

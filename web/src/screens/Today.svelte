@@ -18,11 +18,13 @@
     zonedClock,
     zonedDate,
   } from '../lib/format.js';
+  import { revealMs } from '../lib/motion.js';
   import { resource } from '../lib/resource.svelte.js';
+  import { slide } from 'svelte/transition';
 
   let { active, freshness } = $props();
 
-  const DISCIPLINES = ['swim', 'bike', 'run'];
+  const DISCIPLINES = ['run', 'bike', 'swim'];
   const res = resource(() => '/api/today');
   const data = $derived(res.data);
 
@@ -126,7 +128,7 @@
           <span class="chevron" class:open={showHidden}><Icon name="down" size={18} /></span>
         </button>
         {#if showHidden}
-          <div class="stack">
+          <div class="stack" transition:slide={{ duration: revealMs() }}>
             {#each data.hidden as item (item.key)}
               <div class="tile">
                 <span class="tile-label">{item.label}</span>
@@ -196,7 +198,7 @@
           {/each}
         </div>
       {:else}
-        <p class="note">No swim, bike or run in the last 8 weeks.</p>
+        <p class="note">No run, bike or swim in the last 8 weeks.</p>
       {/if}
     </section>
 

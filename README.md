@@ -109,7 +109,7 @@ This runs free on Vercel's Hobby plan, which is for personal, non-commercial use
    ```bash
    python -c "import secrets; print(secrets.token_urlsafe(32))"
    ```
-6. In **Settings**, then **Environment Variables**, add these for **Production only**:
+6. Go to the project's main sidebar, because this page isn't inside **Settings**. Choose **Environment Variables** and add these for **Production only**:
 
    | Name | Value |
    |---|---|
@@ -118,7 +118,7 @@ This runs free on Vercel's Hobby plan, which is for personal, non-commercial use
    | `CREED_ORIGIN` | Your address from step 4, starting with `https://` and with no slash at the end |
    | `CREED_SETUP_SECRET` | The first secret |
    | `CREED_CRON_SECRET` | The second secret |
-7. In **Deployments**, open the latest one and choose **Redeploy**. New settings only apply to new deployments.
+7. In **Deployments**, open the menu beside the latest one and choose **Redeploy**. New settings only apply to new deployments.
 8. Open `https://<name>.vercel.app/api/health`. It should say `{"status":"ok"}`.
 9. On your iPhone, open your address in Safari, tap **Share**, then **Add to Home Screen**. Open Creed from the home screen, enter the setup secret, create your passkey with Face ID, and save the recovery code.
 
@@ -131,6 +131,7 @@ This runs free on Vercel's Hobby plan, which is for personal, non-commercial use
 - **Sources:** each row records whether it came from the API, the account export or a manual entry, so those can be added without changing the schema.
 - **Nothing is filled in.** A day with no data has no row. Values that fail validation are kept but flagged, and metrics leave them out.
 - **Server side only.** Row-level security is on for every table with no policies, and Supabase's public API roles have no access.
+- **GPS stays in the file.** Positions are only read from an activity's FIT file when you open its map, and they're never saved anywhere else. [OpenFreeMap](https://openfreemap.org) supplies the map, with no key and no account, so opening one shows them which area you're looking at.
 
 ## Metrics
 

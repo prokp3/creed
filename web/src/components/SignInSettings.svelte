@@ -100,7 +100,7 @@
     });
 </script>
 
-<section class="gutter stack">
+<section class="gutter stack" data-no-haptics>
   <h2 class="section-heading">Sign-in</h2>
 
   {#if problem}

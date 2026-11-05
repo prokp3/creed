@@ -12,6 +12,7 @@
     <circle cx="56" cy="56" r={RADIUS} fill="none" stroke={full ? color : 'var(--track)'} stroke-width="8" />
     {#if !full && filled > 0}
       <circle
+        class="arc"
         cx="56"
         cy="56"
         r={RADIUS}
@@ -36,6 +37,16 @@
     flex-direction: column;
     align-items: center;
     gap: 2px;
+  }
+
+  .arc {
+    animation: sweep 0.8s var(--ease) both;
+  }
+
+  @keyframes sweep {
+    from {
+      stroke-dasharray: 0 400;
+    }
   }
 
   .value {
