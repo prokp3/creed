@@ -23,290 +23,40 @@ Privacy by construction:
 from __future__ import annotations
 
 import argparse
-import base64
 import getpass
-import http.client
-import io
 import json
 import os
-import random
 import re
 import statistics
 import sys
-import time
-import urllib.error
-import urllib.parse
-import urllib.request
-import zipfile
-from collections import Counter, defaultdict
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-DEFAULT_BASE_URL = "https://personal.connectapi.garmin.com"
-GARMIN_HOSTS = {"personal.connectapi.garmin.com", "personal.connectapi.garmin.cn"}
-LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
-TOKEN_PATH = "/personalapitoken-service/personal-api/personal-api-key/token"
-KEY_ENV_VAR = "GARMIN_PERSONAL_API_KEY"
-BASE_URL_ENV_VAR = "GARMIN_PERSONAL_API_BASE_URL"
-# Same location Garmin's official client reads, so the key is only stored once.
-DEFAULT_KEY_FILE = Path("~/.config/garmin/connect-personal-api-key")
-USER_AGENT = "triathlon-dashboard-probe/0.1 (personal data-availability check)"
+# The tool runs without installing anything: the creed package sits beside it and uses the standard library here.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-MAX_BODY_BYTES = 128 * 1024 * 1024
-MAX_FIT_BYTES = 64 * 1024 * 1024
+from creed.garmin.client import (  # noqa: E402
+    BASE_URL_ENV_VAR,
+    DEFAULT_BASE_URL,
+    ApiStopped as ProbeStopped,
+    AuthFailed,
+    Client,
+    Resp,
+    check_base_url,  # noqa: F401  (kept importable for the tests)
+)
+from creed.garmin.fit import read_activity_zip, read_fit  # noqa: E402, F401
+from creed.garmin.keys import DEFAULT_KEY_FILE, KEY_ENV_VAR, resolve_api_key, save_api_key  # noqa: E402
+from creed.garmin.types import discipline_of  # noqa: E402
+
 WINDOW_LADDER = (365, 180, 90, 31, 28, 14, 7, 1)
 DAY_OFFSETS = (0, 1, 2, 7, 30, 90, 180, 365, 730, 1095, 1460, 1825)
+KNOWN_DATE_SAMPLES = 6
 EMPTY_STOP_DAYS = 180
 EXIT_OK, EXIT_AUTH, EXIT_PARTIAL = 0, 2, 3
-
-
-class ProbeStopped(Exception):
-    """Stop probing but still write a report from what was gathered."""
-
-
-class AuthFailed(Exception):
-    """The API key could not be exchanged for a token."""
-
-
-# ---------------------------------------------------------------------------
-# Key handling
-# ---------------------------------------------------------------------------
-
-
-def resolve_api_key(key_file: str | None = None) -> str:
-    """Explicit file, then environment variable, then the default file."""
-    if key_file:
-        return _read_key_file(Path(key_file).expanduser())
-    env = os.environ.get(KEY_ENV_VAR)
-    if env is not None:
-        if not env.strip():
-            raise AuthFailed(f"{KEY_ENV_VAR} is set but empty.")
-        return env.strip()
-    default = DEFAULT_KEY_FILE.expanduser()
-    if default.exists():
-        return _read_key_file(default)
-    raise AuthFailed(
-        "No API key found. Create one at https://connect.garmin.com/app/settings/personalApiToken "
-        "then run: python tools/garmin_probe.py --save-key"
-    )
-
-
-def _read_key_file(path: Path) -> str:
-    try:
-        key = path.read_text(encoding="utf-8-sig").strip()
-    except OSError as exc:
-        raise AuthFailed(f"Could not read key file {path}: {type(exc).__name__}") from exc
-    if not key:
-        raise AuthFailed(f"Key file {path} is empty.")
-    return key
-
-
-def save_api_key(key: str, path: Path | None = None) -> Path:
-    key = key.strip()
-    if not key:
-        raise AuthFailed("No key entered; nothing saved.")
-    target = (path or DEFAULT_KEY_FILE).expanduser()
-    target.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as fh:
-        fh.write(key)
-    return target
-
-
-def check_base_url(url: str) -> str:
-    """Refuse to send the key anywhere but Garmin (or a local test server)."""
-    parsed = urllib.parse.urlparse(url)
-    if parsed.scheme == "https" and parsed.hostname in GARMIN_HOSTS:
-        return url.rstrip("/")
-    if parsed.hostname in LOCAL_HOSTS:
-        return url.rstrip("/")
-    raise AuthFailed(f"Refusing to send the API key to {parsed.hostname!r}: not a Garmin API host.")
-
-
-# ---------------------------------------------------------------------------
-# HTTP client: pacing, backoff, token renewal
-# ---------------------------------------------------------------------------
-
-
-class _NoRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, *args: Any, **kwargs: Any) -> None:
-        return None
-
-
-@dataclass
-class Resp:
-    status: int
-    body: bytes = b""
-    headers: dict[str, str] = field(default_factory=dict)
-    error: str | None = None
-
-    @property
-    def ok(self) -> bool:
-        return 200 <= self.status < 300
-
-    def json(self) -> Any:
-        if not self.body:
-            return None
-        return json.loads(self.body)
-
-
-class Client:
-    """Rate limits are undocumented, so pace gently and back off on any push-back."""
-
-    def __init__(
-        self,
-        base_url: str,
-        api_key: str,
-        *,
-        delay: float = 1.2,
-        max_requests: int = 1000,
-        timeout: float = 30.0,
-        sleep: Callable[[float], None] = time.sleep,
-        backoff: float = 5.0,
-    ) -> None:
-        self.base_url = check_base_url(base_url)
-        self._api_key = api_key
-        self._token: str | None = None
-        self.delay = delay
-        self.max_requests = max_requests
-        self.timeout = timeout
-        self.sleep = sleep
-        self.backoff = backoff
-        self.requests = 0
-        self.token_info: dict[str, Any] = {"minted": 0}
-        self.rate_limit_events: list[dict[str, Any]] = []
-        self.rate_limit_headers: set[str] = set()
-        self._last_request = 0.0
-        self._opener = urllib.request.build_opener(_NoRedirect)
-
-    def redact(self, text: str) -> str:
-        for secret in (self._api_key, self._token):
-            if secret:
-                text = text.replace(secret, "[REDACTED]")
-        return re.sub(r"eyJ[\w-]{8,}\.[\w-]{8,}\.[\w-]*", "[REDACTED-JWT]", text)
-
-    def _pace(self) -> None:
-        wait = self._last_request + self.delay * (1 + random.random() * 0.25) - time.monotonic()
-        if self.delay and wait > 0:
-            self.sleep(wait)
-        self._last_request = time.monotonic()
-
-    def _send(self, method: str, url: str, headers: dict[str, str]) -> Resp:
-        headers = dict(headers)
-        for _ in range(4):
-            if self.requests >= self.max_requests:
-                raise ProbeStopped(f"Request budget of {self.max_requests} used up.")
-            self._pace()
-            self.requests += 1
-            if self.requests % 25 == 0:
-                print(f"    ...{self.requests} requests so far", flush=True)
-            req = urllib.request.Request(url, method=method, headers=headers)
-            try:
-                with self._opener.open(req, timeout=self.timeout) as r:
-                    return Resp(r.getcode(), r.read(MAX_BODY_BYTES), dict(r.headers.items()))
-            except urllib.error.HTTPError as exc:
-                location = exc.headers.get("Location")
-                if exc.code in (301, 302, 303, 307, 308) and location:
-                    target = urllib.parse.urljoin(url, location)
-                    parsed = urllib.parse.urlparse(target)
-                    if parsed.scheme != "https" and parsed.hostname not in LOCAL_HOSTS:
-                        return Resp(exc.code, error="refused non-https redirect")
-                    # A presigned download host must never see the bearer token.
-                    if parsed.hostname != urllib.parse.urlparse(url).hostname:
-                        headers.pop("Authorization", None)
-                    url = target
-                    continue
-                return Resp(exc.code, exc.read(4096), dict(exc.headers.items()))
-            except (urllib.error.URLError, http.client.HTTPException, OSError) as exc:
-                return Resp(0, error=type(exc).__name__)
-        return Resp(0, error="too many redirects")
-
-    def mint_token(self) -> None:
-        r = self._send(
-            "POST",
-            f"{self.base_url}{TOKEN_PATH}",
-            {"Authorization": f"ApiKey {self._api_key}", "Accept": "*/*", "User-Agent": USER_AGENT},
-        )
-        if r.status == 0:
-            raise AuthFailed(f"Could not reach Garmin to get a token ({r.error}).")
-        if not r.ok:
-            hint = " The key is wrong, deleted or expired." if r.status in (401, 403) else ""
-            raise AuthFailed(f"Token exchange failed with HTTP {r.status}.{hint}")
-        text = r.body.decode("utf-8", "replace").strip()
-        response_format = "raw text JWT"
-        if text.startswith("{"):
-            response_format = "JSON object"
-            text = str(json.loads(text).get("access_token", ""))
-        if not text:
-            raise AuthFailed("Token endpoint returned 200 with no token.")
-        self._token = text
-        self.token_info = {
-            "minted": self.token_info["minted"] + 1,
-            "response_format": response_format,
-            **_jwt_facts(text),
-        }
-
-    def get(self, path: str, params: dict[str, Any] | None = None, accept: str = "application/json") -> Resp:
-        if self._token is None:
-            self.mint_token()
-        url = f"{self.base_url}{path}"
-        if params:
-            url += "?" + urllib.parse.urlencode(params)
-        attempts = 0
-        reminted = False
-        while True:
-            r = self._send(
-                "GET",
-                url,
-                {"Authorization": f"Bearer {self._token}", "Accept": accept, "User-Agent": USER_AGENT},
-            )
-            for name in r.headers:
-                if "ratelimit" in name.lower() or name.lower() == "retry-after":
-                    self.rate_limit_headers.add(name)
-            if r.status == 401 and not reminted:
-                reminted = True
-                self.mint_token()
-                continue
-            limited = r.status in (429, 503)
-            if not (limited or r.status == 0 or r.status in (500, 502, 504)):
-                return r
-            attempts += 1
-            if limited:
-                self.rate_limit_events.append(
-                    {"status": r.status, "retry_after": r.headers.get("Retry-After"), "after_requests": self.requests}
-                )
-            if attempts >= (5 if limited else 2):
-                if limited:
-                    raise ProbeStopped(f"Garmin kept answering HTTP {r.status}; stopping to be polite.")
-                return r
-            self.sleep(self._retry_wait(r, attempts))
-
-    def _retry_wait(self, r: Resp, attempts: int) -> float:
-        retry_after = r.headers.get("Retry-After", "")
-        if retry_after.isdigit():
-            return min(float(retry_after), 300.0)
-        return min(self.backoff * 2 ** (attempts - 1) * (1 + random.random() * 0.25), 300.0)
-
-
-def _jwt_facts(token: str) -> dict[str, Any]:
-    """Claim names, scopes and lifetime only: no subject, IDs or the token itself."""
-    try:
-        encoded = token.split(".")[1]
-        claims = json.loads(base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4)))
-    except (IndexError, ValueError):
-        return {"is_jwt": False}
-    facts: dict[str, Any] = {"is_jwt": True, "claim_names": sorted(claims)}
-    for name in ("scope", "scopes", "authorities"):
-        if name in claims:
-            facts[name] = claims[name]
-    if isinstance(claims.get("exp"), (int, float)):
-        facts["expires_in_hours"] = round((claims["exp"] - time.time()) / 3600, 2)
-    if isinstance(claims.get("exp"), (int, float)) and isinstance(claims.get("iat"), (int, float)):
-        facts["lifetime_hours"] = round((claims["exp"] - claims["iat"]) / 3600, 2)
-    return facts
 
 
 # ---------------------------------------------------------------------------
@@ -479,181 +229,6 @@ def timestamp_of(value: Any) -> datetime | None:
 
 
 # ---------------------------------------------------------------------------
-# FIT reader: structure and field coverage only, values are not kept
-# ---------------------------------------------------------------------------
-
-FIT_BASE_SIZE = {0: 1, 1: 1, 2: 1, 3: 2, 4: 2, 5: 4, 6: 4, 7: 1, 8: 4, 9: 8, 10: 1, 11: 2, 12: 4, 13: 1, 14: 8, 15: 8, 16: 8}
-FIT_INVALID = {
-    0: 0xFF, 1: 0x7F, 2: 0xFF, 3: 0x7FFF, 4: 0xFFFF, 5: 0x7FFFFFFF, 6: 0xFFFFFFFF, 7: 0x00,
-    8: 0xFFFFFFFF, 9: 0xFFFFFFFFFFFFFFFF, 10: 0x00, 11: 0x0000, 12: 0x00000000, 13: 0xFF,
-    14: 0x7FFFFFFFFFFFFFFF, 15: 0xFFFFFFFFFFFFFFFF, 16: 0x0000000000000000,
-}
-FIT_MESSAGES = {
-    0: "file_id", 2: "device_settings", 3: "user_profile", 7: "zones_target", 8: "hr_zone", 9: "power_zone",
-    12: "sport", 18: "session", 19: "lap", 20: "record", 21: "event", 23: "device_info", 34: "activity",
-    35: "software", 49: "file_creator", 78: "hrv", 101: "length", 132: "hr", 160: "gps_metadata",
-    206: "field_description", 207: "developer_data_id", 216: "time_in_zone", 290: "beat_intervals",
-    297: "respiration_rate", 312: "split", 313: "split_summary",
-}
-FIT_RECORD_FIELDS = {
-    0: "position_lat", 1: "position_long", 2: "altitude", 3: "heart_rate", 4: "cadence", 5: "distance",
-    6: "speed", 7: "power", 13: "temperature", 53: "fractional_cadence", 73: "enhanced_speed",
-    78: "enhanced_altitude", 253: "timestamp",
-}
-FIT_SESSION_FIELDS = {
-    5: "sport", 6: "sub_sport", 7: "total_elapsed_time", 8: "total_timer_time", 9: "total_distance",
-    16: "avg_heart_rate", 17: "max_heart_rate", 20: "avg_power", 21: "max_power", 24: "total_training_effect",
-    34: "normalized_power", 35: "training_stress_score", 36: "intensity_factor", 44: "pool_length",
-    137: "total_anaerobic_training_effect",
-}
-FIT_MSG_RECORD, FIT_MSG_SESSION, FIT_MSG_PHYSIO = 20, 18, 140
-
-
-def read_fit(data: bytes) -> dict[str, Any]:
-    """Count messages and valid fields in a FIT file. Bad input yields parse_error, never a crash."""
-    messages: Counter = Counter()
-    valid_fields: dict[int, Counter] = defaultdict(Counter)
-    record_times: list[int] = []
-    result: dict[str, Any] = {"parse_error": None, "truncated": False, "fit_files": 0}
-    pos = 0
-    try:
-        while pos + 12 <= len(data):
-            header_size = data[pos]
-            if header_size not in (12, 14) or data[pos + 8 : pos + 12] != b".FIT":
-                if result["fit_files"] == 0:
-                    raise ValueError("no .FIT signature")
-                break
-            data_size = int.from_bytes(data[pos + 4 : pos + 8], "little")
-            start = pos + header_size
-            end = start + data_size
-            if end > len(data):
-                result["truncated"] = True
-                end = len(data)
-            _read_fit_records(data, start, end, messages, valid_fields, record_times)
-            result["fit_files"] += 1
-            pos = end + 2
-        if result["fit_files"] == 0:
-            raise ValueError("file too short")
-    except (IndexError, ValueError, KeyError) as exc:
-        result["parse_error"] = f"{type(exc).__name__}: {exc}"
-
-    record_count = messages.get(FIT_MSG_RECORD, 0)
-    deltas = [b - a for a, b in zip(record_times, record_times[1:]) if b >= a]
-    result.update(
-        messages={FIT_MESSAGES.get(num, f"unknown_{num}"): n for num, n in sorted(messages.items())},
-        undocumented_messages=sorted(num for num in messages if num not in FIT_MESSAGES),
-        record_count=record_count,
-        record_median_interval_s=statistics.median(deltas) if deltas else None,
-        record_field_pct={
-            FIT_RECORD_FIELDS.get(num, f"field_{num}"): round(100 * n / record_count, 1)
-            for num, n in sorted(valid_fields[FIT_MSG_RECORD].items())
-        }
-        if record_count
-        else {},
-        session_fields=sorted(
-            FIT_SESSION_FIELDS.get(num, f"field_{num}") for num in valid_fields[FIT_MSG_SESSION]
-        ),
-        message_140_field_numbers=sorted(valid_fields[FIT_MSG_PHYSIO]),
-    )
-    return result
-
-
-def _read_fit_records(
-    data: bytes,
-    start: int,
-    end: int,
-    messages: Counter,
-    valid_fields: dict[int, Counter],
-    record_times: list[int],
-) -> None:
-    definitions: dict[int, tuple[int, str, list[tuple[int, int, int]], int]] = {}
-    last_ts: int | None = None
-    p = start
-    while p < end:
-        header = data[p]
-        p += 1
-        compressed_offset: int | None = None
-        if header & 0x80:
-            local = (header >> 5) & 0x03
-            compressed_offset = header & 0x1F
-        elif header & 0x40:
-            local = header & 0x0F
-            has_dev = bool(header & 0x20)
-            byteorder = "big" if data[p + 1] else "little"
-            global_num = int.from_bytes(data[p + 2 : p + 4], byteorder)
-            count = data[p + 4]
-            p += 5
-            fields = [(data[p + 3 * i], data[p + 3 * i + 1], data[p + 3 * i + 2]) for i in range(count)]
-            p += 3 * count
-            dev_size = 0
-            if has_dev:
-                dev_count = data[p]
-                p += 1
-                dev_size = sum(data[p + 3 * i + 1] for i in range(dev_count))
-                p += 3 * dev_count
-            definitions[local] = (global_num, byteorder, fields, dev_size)
-            continue
-        else:
-            local = header & 0x0F
-        if local not in definitions:
-            raise ValueError("data message before its definition")
-        global_num, byteorder, fields, dev_size = definitions[local]
-        if p + sum(f[1] for f in fields) + dev_size > end:
-            return  # Trailing partial message in a truncated file.
-        messages[global_num] += 1
-        ts: int | None = None
-        for num, size, base in fields:
-            raw = data[p : p + size]
-            p += size
-            if _fit_field_valid(raw, base, byteorder):
-                valid_fields[global_num][num] += 1
-                if num == 253 and size == 4:
-                    ts = int.from_bytes(raw, byteorder)
-        p += dev_size
-        if ts is None and compressed_offset is not None and last_ts is not None:
-            ts = (last_ts & ~0x1F) | compressed_offset
-            if compressed_offset < (last_ts & 0x1F):
-                ts += 0x20
-        if ts is not None:
-            last_ts = ts
-            if global_num == FIT_MSG_RECORD:
-                record_times.append(ts)
-
-
-def _fit_field_valid(raw: bytes, base: int, byteorder: str) -> bool:
-    number = base & 0x1F
-    element = FIT_BASE_SIZE.get(number)
-    if element is None or not raw:
-        return bool(raw)
-    invalid = FIT_INVALID[number]
-    if number == 7:
-        return any(raw)
-    for i in range(0, len(raw) - element + 1, element):
-        if int.from_bytes(raw[i : i + element], byteorder) != invalid:
-            return True
-    return False
-
-
-def read_activity_zip(content: bytes) -> dict[str, Any]:
-    """The download endpoint returns a ZIP. Read it in memory and never extract to disk."""
-    try:
-        archive = zipfile.ZipFile(io.BytesIO(content))
-    except zipfile.BadZipFile:
-        # Some originals may not be zipped: look at the bytes directly.
-        return {"zip": False, "bytes": len(content), **read_fit(content)}
-    with archive:
-        names = archive.infolist()
-        fits = [i for i in names if i.filename.lower().endswith(".fit") and i.file_size <= MAX_FIT_BYTES]
-        extensions = sorted({Path(i.filename).suffix.lower() for i in names})
-        if not fits:
-            return {"zip": True, "bytes": len(content), "entries": len(names), "extensions": extensions,
-                    "parse_error": "no .fit entry in the archive"}
-        fit = max(fits, key=lambda i: i.file_size)
-        return {"zip": True, "bytes": len(content), "entries": len(names), "extensions": extensions,
-                **read_fit(archive.read(fit))}
-
-
-# ---------------------------------------------------------------------------
 # What gets probed
 # ---------------------------------------------------------------------------
 
@@ -674,10 +249,13 @@ class RangeEndpoint:
 
 @dataclass(frozen=True)
 class DayEndpoint:
+    """A single-date endpoint. known_from names a range endpoint whose dates are known to hold data."""
+
     id: str
     path: str
     param: str | None
     has_data: Callable[[Any], bool]
+    known_from: str | None = None
 
 
 def _v2_has_data(row: dict) -> bool:
@@ -704,7 +282,8 @@ RANGE_ENDPOINTS = (
                   31, 31, None, "calendarDate", lambda r: _pos(r, "sleepTimeSeconds")),
     RangeEndpoint("body_battery_daily", "/wellness-service/wellness/bodyBattery/reports/daily", ("startDate", "endDate"),
                   31, 31, None, "date",
-                  lambda r: _pos(r, "charged") or _pos(r, "drained") or bool(r.get("bodyBatteryValuesArray"))),
+                  # Garmin returns rows with an array for dates before the account existed, so the array proves nothing.
+                  lambda r: r.get("charged") is not None or r.get("drained") is not None),
     RangeEndpoint("stress_daily", "/usersummary-service/stats/stress/daily/{start}/{end}", None,
                   28, 28, None, "calendarDate", _stress_has_data),
     RangeEndpoint("steps_daily", "/usersummary-service/stats/steps/daily/{start}/{end}", None,
@@ -716,14 +295,18 @@ RANGE_ENDPOINTS = (
 )
 
 DAY_ENDPOINTS = (
-    DayEndpoint("daily_sleep", "/sleep-service/sleep/dailySleep", "date", lambda o: _pos(o, "sleepTimeSeconds")),
-    DayEndpoint("hrv_chart", "/hrv-service/hrv/{date}", None, lambda o: _pos(o, "lastNightAvg")),
+    DayEndpoint("daily_sleep", "/sleep-service/sleep/dailySleep", "date", lambda o: _pos(o, "sleepTimeSeconds"),
+                known_from="sleep_summaries"),
+    DayEndpoint("hrv_chart", "/hrv-service/hrv/{date}", None, lambda o: _pos(o, "lastNightAvg"),
+                known_from="hrv_daily"),
     DayEndpoint("daily_heart_rate", "/wellness-service/wellness/dailyHeartRate", "date",
-                lambda o: _pos(o, "restingHeartRate") or bool(isinstance(o, dict) and o.get("heartRateValues"))),
+                lambda o: _pos(o, "restingHeartRate") or bool(isinstance(o, dict) and o.get("heartRateValues")),
+                known_from="daily_summaries_v2"),
     DayEndpoint("spo2", "/wellness-service/wellness/daily/spo2acclimation/{date}", None,
                 lambda o: _pos(o, "averageSpO2") or bool(isinstance(o, dict) and o.get("spO2HourlyAverages"))),
     DayEndpoint("user_summary_daily", "/usersummary-service/usersummary/daily", "calendarDate",
-                lambda o: _pos(o, "restingHeartRate") or _pos(o, "totalSteps")),
+                lambda o: _pos(o, "restingHeartRate") or _pos(o, "totalSteps"),
+                known_from="daily_summaries_v2"),
     DayEndpoint("fitness_age", "/fitnessage-service/fitnessage/v2/{date}", None, lambda o: _fitness_age_has(o)),
 )
 
@@ -746,19 +329,6 @@ ACTIVITY_FIELDS = (
     "activeLengths", "strokes", "poolLength", "lapCount", "avgRespirationRate", "differenceBodyBattery",
     "lactateThresholdBpm", "maxFtp", "hasSeedFirstbeatProfile", "manufacturer",
 )
-
-
-def discipline_of(type_key: str | None) -> str:
-    key = (type_key or "").lower()
-    if key in ("multi_sport", "transition", "transition_v2") or "transition" in key:
-        return "multisport"
-    if "swim" in key:
-        return "swim"
-    if "cycl" in key or "biking" in key or "bike" in key or "virtual_ride" in key:
-        return "bike"
-    if "run" in key:
-        return "run"
-    return "other"
 
 
 class EndpointResult:
@@ -1114,6 +684,19 @@ class Probe:
                 self._after_day(ep.id, body, day)
             return has_data
 
+        known = sorted(self.results[ep.known_from].days) if ep.known_from in self.results else []
+        if known:
+            # Blind dates mostly land on unworn days, which says nothing about how far back an
+            # endpoint goes. Dates another endpoint proved have data give a real answer.
+            count = min(KNOWN_DATE_SAMPLES, len(known))
+            picks = sorted({known[round(i * (len(known) - 1) / max(count - 1, 1))] for i in range(count)})
+            answered = [day for day in picks if query(day)]
+            res.notes.append(
+                f"Tested {len(picks)} dates that {ep.known_from} shows have data, from {picks[0]} to {picks[-1]}: "
+                f"{len(answered)} returned data here."
+            )
+            return
+
         hits: list[date] = []
         misses: list[date] = []
         for offset in DAY_OFFSETS:
@@ -1210,7 +793,7 @@ def _new_sleep_checks() -> dict[str, Any]:
 def _update_sleep_checks(checks: dict[str, Any], row: dict, day: date) -> None:
     checks["nights"] += 1
     start_local, end_local = row.get("sleepStartTimestampLocal"), row.get("sleepEndTimestampLocal")
-    start_gmt, end_gmt = row.get("sleepStartTimestampGMT"), row.get("sleepEndTimestampGMT")
+    end_gmt = row.get("sleepEndTimestampGMT")
     checks["timestamp_types"][_type_name(end_gmt)] += 1
     wake, bed = date_of(end_local), date_of(start_local)
     if wake == day:
@@ -1637,7 +1220,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         api_key = resolve_api_key(args.api_key_file)
         client = Client(os.environ.get(BASE_URL_ENV_VAR, DEFAULT_BASE_URL), api_key,
-                        delay=args.delay, max_requests=args.max_requests)
+                        delay=args.delay, max_requests=args.max_requests,
+                        on_request=lambda n: n % 25 == 0 and print(f"    ...{n} requests so far", flush=True))
         probe = Probe(client, years=args.years, raw_dir=out_dir / "raw" if args.save_raw else None)
         print(f"Probing {client.base_url}. Requests are spaced {args.delay}s apart, so expect several minutes.")
         probe.run()

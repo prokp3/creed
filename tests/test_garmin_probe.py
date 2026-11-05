@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import garmin_probe as gp  # noqa: E402
+from creed.garmin import keys  # noqa: E402
 from mock_garmin import GOOD_KEY, PLANTED_LATITUDE, PLANTED_PROFILE_ID, MockGarmin, build_fit, fit_definition  # noqa: E402
 
 TODAY = date(2026, 11, 5)
@@ -81,6 +82,17 @@ class FullRun(unittest.TestCase):
         # Mock activities stop at 238 days; daily data predating them must still be found.
         self.assertEqual(self.v["Sleep: duration"]["earliest"], (TODAY - timedelta(days=300)).isoformat())
         self.assertEqual(self.v["HRV: nightly average"]["earliest"], (TODAY - timedelta(days=120)).isoformat())
+
+    def test_body_battery_rows_with_only_an_array_do_not_count_as_data(self) -> None:
+        by_id = {e["id"]: e for e in self.summary["endpoints"]}
+        self.assertEqual(by_id["body_battery_daily"]["earliest"], (TODAY - timedelta(days=300)).isoformat())
+
+    def test_single_night_endpoints_test_dates_known_to_have_data(self) -> None:
+        by_id = {e["id"]: e for e in self.summary["endpoints"]}
+        # The oldest known night answers, so depth comes from real dates rather than blind samples.
+        self.assertEqual(by_id["hrv_chart"]["earliest"], (TODAY - timedelta(days=120)).isoformat())
+        self.assertEqual(by_id["daily_sleep"]["earliest"], (TODAY - timedelta(days=300)).isoformat())
+        self.assertTrue(any("6 returned data here" in note for note in by_id["hrv_chart"]["notes"]))
 
     def test_walk_stops_after_a_long_empty_stretch_and_says_so(self) -> None:
         by_id = {e["id"]: e for e in self.summary["endpoints"]}
@@ -350,7 +362,7 @@ class Credentials(unittest.TestCase):
 
     def test_missing_key_explains_how_to_create_one(self) -> None:
         env = {k: v for k, v in os.environ.items() if k != gp.KEY_ENV_VAR}
-        with mock.patch.dict(os.environ, env, clear=True), mock.patch.object(gp, "DEFAULT_KEY_FILE", self.dir / "none"):
+        with mock.patch.dict(os.environ, env, clear=True), mock.patch.object(keys, "DEFAULT_KEY_FILE", self.dir / "none"):
             with self.assertRaises(gp.AuthFailed) as caught:
                 gp.resolve_api_key()
         self.assertIn("--save-key", str(caught.exception))
@@ -368,7 +380,7 @@ class Credentials(unittest.TestCase):
 
     def test_save_key_command_never_echoes_the_key(self) -> None:
         captured = io.StringIO()
-        with mock.patch.object(gp, "DEFAULT_KEY_FILE", self.dir / "key"), \
+        with mock.patch.object(keys, "DEFAULT_KEY_FILE", self.dir / "key"), \
                 mock.patch.object(gp.getpass, "getpass", return_value="super-secret-value"), \
                 contextlib.redirect_stdout(captured):
             self.assertEqual(gp.main(["--save-key"]), gp.EXIT_OK)

@@ -1,0 +1,35 @@
+[project]
+name = "creed"
+version = "0.1.0"
+description = "A personal triathlon dashboard built from your own Garmin data."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.12"
+dependencies = [
+  "psycopg[binary]>=3.2",
+  "tzdata",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pgserver>=0.1.4",
+  "pytest>=8",
+  "ruff",
+]
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["creed*"]
+
+[tool.setuptools.package-data]
+creed = ["db/migrations/*.sql"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", "tests", "tools"]
+
+[tool.ruff]
+line-length = 120

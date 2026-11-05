@@ -87,6 +87,8 @@ class MockGarmin:
         redirect_fit: bool = False,
         extra_summary_fields: dict[str, Any] | None = None,
         always_429: bool = False,
+        hrv_renamed: bool = False,
+        file_status: int | None = None,
     ) -> None:
         self.today = today
         self.history_days = history_days
@@ -100,6 +102,8 @@ class MockGarmin:
         self.redirect_fit = redirect_fit
         self.extra_summary_fields = extra_summary_fields or {}
         self.always_429 = always_429
+        self.hrv_renamed = hrv_renamed
+        self.file_status = file_status
         self.tokens_issued = 0
         self.data_requests = 0
         self.log: list[str] = []
@@ -174,7 +178,7 @@ class MockGarmin:
             rows.append({
                 "activityId": 10_000 + i, "activityName": "SECRET_ACTIVITY_NAME", "description": "SECRET_DESCRIPTION",
                 "ownerFullName": "SECRET_OWNER", "ownerDisplayName": "SECRET_DISPLAY",
-                "startTimeLocal": f"{day.isoformat()} 06:00:00", "startTimeGMT": f"{(day - timedelta(days=1)).isoformat()} 00:30:00",
+                "startTimeLocal": f"{day.isoformat()} 06:00:00", "startTimeGMT": f"{day.isoformat()} 00:30:00",
                 "activityType": {"typeKey": kind}, "startLatitude": PLANTED_LATITUDE, "startLongitude": 73.8,
                 "duration": 3600.0, "distance": 1500.0 if swim else 10000.0, "averageHR": None if swim else 140.0,
                 "maxHR": None if swim else 178.0, "activityTrainingLoad": None if swim else 90.0,
@@ -263,6 +267,8 @@ class MockGarmin:
                 if re.fullmatch(r"/activity-service/activity/\d+/workouts", path):
                     return self._json([])
                 if match := re.fullmatch(r"/download-service/files/activity/(\d+)", path):
+                    if mock.file_status is not None:
+                        return self._send(mock.file_status)
                     if mock.redirect_fit:
                         # A different hostname for the same server, like a presigned download host.
                         return self._send(302, headers={"Location": f"http://localhost:{mock.port}/cdn/{match.group(1)}.zip"})
@@ -272,6 +278,8 @@ class MockGarmin:
                         return self._send(400)
                     return self._json({"data": [mock.v2_row(d) for d in self._dates(q["startDate"], q["endDate"])]})
                 if match := re.fullmatch(r"/hrv-service/hrv/daily/([\d-]+)/([\d-]+)", path):
+                    if mock.hrv_renamed:
+                        return self._json({"nightlyVariability": [{"night": match.group(1)}]})
                     rows = []
                     for d in self._dates(match.group(1), match.group(2)):
                         if (mock.today - d).days <= mock.hrv_days and mock._worn(d):
@@ -286,8 +294,11 @@ class MockGarmin:
                 if path == "/wellness-service/wellness/bodyBattery/reports/daily":
                     if not self._range_ok(q["startDate"], q["endDate"], "bodyBattery"):
                         return self._send(400)
-                    return self._json([{"date": d.isoformat(), "charged": 60, "drained": 55}
-                                       for d in self._dates(q["startDate"], q["endDate"]) if mock._in_history(d)])
+                    # Like the real API: every date gets a row and an array, even before the account existed.
+                    return self._json([{"date": d.isoformat(), "bodyBatteryValuesArray": [[1, None]],
+                                        "charged": 60 if mock._in_history(d) else None,
+                                        "drained": 55 if mock._in_history(d) else None}
+                                       for d in self._dates(q["startDate"], q["endDate"])])
                 if match := re.fullmatch(r"/usersummary-service/stats/(stress|steps|hydration)/daily/([\d-]+)/([\d-]+)", path):
                     kind, start, end = match.groups()
                     if not self._range_ok(start, end, kind):
