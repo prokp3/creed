@@ -1,16 +1,12 @@
 <script>
   // What a screen shows while it has nothing to show, or when the server can't be reached.
-  let { resource: res, what = 'this screen' } = $props();
+  let { resource: res } = $props();
 </script>
 
 {#if res.error}
   <div class="gutter">
     <div class="card note" role="alert">
-      {#if res.error.status === 401}
-        Sign-in isn't set up yet, so {what} can't load.
-      {:else}
-        {res.error.message}{res.data ? " You're seeing the last numbers that loaded." : ''}
-      {/if}
+      {res.error.message}{res.data ? " You're seeing the last numbers that loaded." : ''}
     </div>
   </div>
 {:else if !res.data}

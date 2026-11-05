@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 from mock_garmin import GOOD_KEY, PLANTED_LATITUDE, PLANTED_PROFILE_ID, MockGarmin
 
-from creed import config
+from creed import auth, config
 from creed.api import app as api_module
 from creed.db.store import Store
 from creed.garmin.client import Client
@@ -16,7 +16,7 @@ from creed.sync.engine import TOKEN_SECRET, run_sync
 
 TOKEN = "test-session-token"
 CRON = "test-cron-secret"
-AUTH = {"Authorization": f"Bearer {TOKEN}"}
+AUTH = {"Cookie": f"{auth.SESSION_COOKIE}={TOKEN}"}
 TODAY = config.local_today()
 DATA_ROUTES = ["/api/race", "/api/today", "/api/in-depth", "/api/activities", "/api/activities/1", "/api/data-quality",
                "/api/settings"]
@@ -25,8 +25,8 @@ DATA_ROUTES = ["/api/race", "/api/today", "/api/in-depth", "/api/activities", "/
 @pytest.fixture
 def client(store, database_url, monkeypatch):
     monkeypatch.setenv("DATABASE_URL", database_url)
-    monkeypatch.setenv("CREED_API_TOKEN", TOKEN)
     monkeypatch.setenv("CREED_CRON_SECRET", CRON)
+    auth.save_dev_session(store.conn, TOKEN)
     store.commit()
     return TestClient(api_module.app)
 
@@ -52,13 +52,12 @@ class TestAccess:
 
     @pytest.mark.parametrize("route", DATA_ROUTES)
     def test_data_routes_refuse_a_wrong_session(self, client, route):
-        assert client.get(route, headers={"Authorization": "Bearer nope"}).status_code == 401
+        assert client.get(route, headers={"Cookie": f"{auth.SESSION_COOKIE}=nope"}).status_code == 401
 
     @pytest.mark.parametrize("route", DATA_ROUTES)
-    def test_with_no_token_configured_nobody_gets_in(self, client, route, monkeypatch):
-        monkeypatch.delenv("CREED_API_TOKEN")
-        assert client.get(route, headers={"Authorization": "Bearer "}).status_code == 401
-        assert client.get(route, headers=AUTH).status_code == 401
+    def test_a_session_token_in_a_header_is_not_a_way_in(self, client, route, monkeypatch):
+        monkeypatch.setenv("CREED_API_TOKEN", TOKEN)
+        assert client.get(route, headers={"Authorization": f"Bearer {TOKEN}"}).status_code == 401
 
     def test_settings_cannot_be_changed_without_a_session(self, client):
         assert client.put("/api/settings", json={"trimp_curve": "female"}).status_code == 401

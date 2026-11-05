@@ -403,7 +403,7 @@ class TestQuality:
 
 class TestSchema:
     def test_migrating_twice_changes_nothing(self, conn):
-        assert migrate(conn) == ["0001_init.sql", "0002_activity_derived.sql"]
+        assert migrate(conn) == ["0001_init.sql", "0002_activity_derived.sql", "0003_auth.sql"]
         assert migrate(conn) == []
 
     def test_every_table_has_row_level_security(self, store):

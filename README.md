@@ -2,7 +2,7 @@
 
 A personal triathlon dashboard built from your own Garmin data, installed on your iPhone's home screen as a web app.
 
-**Status: early development.** The data-availability probe, the Garmin sync, the metrics, the API and the screens work on a local computer. Login, notifications, the account-export importer and the full deploy guide will be added here as they are built. **Don't deploy this publicly until login exists.**
+**Status: early development.** The data-availability probe, the Garmin sync, the metrics, the API, the screens and passkey sign-in work on a local computer. Sign-in has been tested with a simulated passkey, not yet on a real iPhone. Notifications, the account-export importer and the full deploy guide will be added here as they are built.
 
 ## Set up for development
 
@@ -46,23 +46,55 @@ This needs [Node.js](https://nodejs.org) as well, and a database filled by the s
 npm --prefix web install
 ```
 
-Start the API and leave it running. It listens on this computer only and creates a random local token in `.dev-token`:
+Start the API and leave it running. It listens on this computer only. It keeps a random token in `.dev-token` and saves it as a 24-hour session in the database `DATABASE_URL` points at, so keep that file private:
 
 ```bash
 .venv/Scripts/python tools/dev_api.py
 ```
 
-In a second terminal, start the web app, then open http://127.0.0.1:5173:
+In a second terminal, start the web app, then open http://localhost:5173. Use `localhost` rather than `127.0.0.1`, because passkeys need a domain name:
 
 ```bash
 npm --prefix web run dev
 ```
+
+You start signed in. To try the real sign-in screens, sign out in Settings. Restart the API to start signed in again.
 
 Run the web tests with:
 
 ```bash
 npm --prefix web test
 ```
+
+## Signing in
+
+Creed signs you in with a passkey, which on an iPhone means Face ID. A passkey isn't a password you choose. Your device creates it and keeps it, and the server only ever holds its public half.
+
+**The first time:**
+
+1. Choose the app's final address and set `CREED_ORIGIN` to it. See "If the address changes" below.
+2. Make a setup secret and set `CREED_SETUP_SECRET` to it:
+
+   ```bash
+   python -c "import secrets; print(secrets.token_urlsafe(32))"
+   ```
+
+   A real address needs at least 32 characters, because anyone who guesses the secret can add their own passkey and read your data. On `http://localhost`, which only your computer can reach, any length works.
+3. Open the app, enter the secret, and create your passkey.
+4. Save the recovery code it shows you. You'll only see it once.
+
+**Adding a passkey later:** registration stays closed without the secret. To add one, choose **Add a passkey with the setup secret** on the sign-in screen. To shut registration completely, delete `CREED_SETUP_SECRET` from the server once you're set up, and add it back if you need it.
+
+**Staying signed in:** a session lasts 30 days from the last time you used the app. Settings lists your passkeys and lets you sign out.
+
+**If you lose your passkey:** use your recovery code on the sign-in screen. It works once, signs out every other device and gives you a new code. That session lasts an hour, so create a new passkey straight away, then remove the lost one in Settings. If you lose the code while you can still sign in, replace it in Settings.
+
+**If the address changes:** a passkey is tied for good to the address it was made on. If `CREED_ORIGIN` changes:
+
+- Every passkey stops working, and you're signed out.
+- The app on your home screen still points at the old address, so delete it and add it again from the new one.
+
+To get back in, set `CREED_ORIGIN` to the new address, open it, and use your recovery code or the setup secret to create a new passkey. Neither of those is tied to the address. Then remove the old passkey in Settings.
 
 ## How the data is stored
 

@@ -60,7 +60,7 @@
     <h1 class="page-heading">{a ? titleCase(a.type_key) : 'Activity'}</h1>
   </div>
 
-  <StatusNote resource={res} what="this activity" />
+  <StatusNote resource={res} />
 
   {#if a}
     <div class="gutter summary {a.discipline}">

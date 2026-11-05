@@ -9,6 +9,7 @@ dependencies = [
   "fastapi>=0.115",
   "psycopg[binary]>=3.2",
   "tzdata",
+  "webauthn>=3.0.1,<4",
 ]
 
 [project.optional-dependencies]

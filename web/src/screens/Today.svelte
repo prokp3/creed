@@ -98,7 +98,7 @@
     <a class="gear pressable" href="#/settings" aria-label="Settings"><Icon name="settings" size={22} /></a>
   </div>
 
-  <StatusNote resource={res} what="today's numbers" />
+  <StatusNote resource={res} />
 
   {#if data}
     <div class="gutter rings" class:two={data.rings.length === 2}>

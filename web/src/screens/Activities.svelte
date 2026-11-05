@@ -76,7 +76,7 @@
     {/each}
   </div>
 
-  <StatusNote resource={res} what="your activities" />
+  <StatusNote resource={res} />
 
   {#if res.data}
     <div class="gutter stack" class:refreshing={res.loading}>

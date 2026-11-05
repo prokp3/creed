@@ -1,15 +1,9 @@
-"""The API. Every route that returns data requires a signed-in session, and access is denied by default.
-
-Passkey login arrives in a later stage. Until then the only way in is CREED_API_TOKEN, which is meant for
-local development. With that variable unset, every data route answers 401. This app must not be deployed
-publicly until login is finished.
-"""
+"""The API. Every route that returns data requires a signed-in session, and access is denied by default."""
 from __future__ import annotations
 
 import hmac
 import os
 import time
-from collections.abc import Iterator
 from datetime import date, datetime, timedelta, timezone
 from typing import Annotated, Any
 
@@ -17,9 +11,12 @@ import psycopg
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
 
-from creed import config, settings as app_settings
+from creed import auth, config
+from creed import settings as app_settings
 from creed.api import views
-from creed.db import connect, reads
+from creed.api.auth_routes import router as auth_router
+from creed.api.deps import Conn, Session
+from creed.db import reads
 from creed.db.store import Store
 from creed.garmin.client import BASE_URL_ENV_VAR, DEFAULT_BASE_URL, AuthFailed, Client
 from creed.garmin.keys import resolve_api_key
@@ -39,8 +36,25 @@ GARMIN_DAILY = ["body_battery_latest", "body_battery_max", "body_battery_min", "
                 "intensity_moderate", "intensity_vigorous", "respiration_avg"]
 # Yesterday's value still answers "what's my latest" for these, but older values could mislead.
 GARMIN_LATEST_DAYS = 2
+SAFE_METHODS = ("GET", "HEAD", "OPTIONS")
 
 
+@app.middleware("http")
+async def refuse_changes_from_other_sites(request: Request, call_next):
+    """Browsers name the page that sent a request, so another site can't act with the session cookie.
+
+    SameSite=Strict on the cookie already stops this. It's checked twice because the cost of being wrong is high.
+    The scheduled sync has no browser and its own secret.
+    """
+    origin = request.headers.get("origin")
+    if request.method not in SAFE_METHODS and origin is not None and not request.url.path.startswith("/api/cron/"):
+        expected = os.environ.get(auth.ORIGIN_ENV_VAR, "").strip().rstrip("/")
+        if origin.rstrip("/") != expected:
+            return JSONResponse({"detail": "Not allowed."}, status_code=403)
+    return await call_next(request)
+
+
+# Added last, so it runs outermost and covers every response, including refusals.
 @app.middleware("http")
 async def no_caching_of_personal_data(request: Request, call_next):
     response = await call_next(request)
@@ -49,23 +63,21 @@ async def no_caching_of_personal_data(request: Request, call_next):
     return response
 
 
-def get_conn() -> Iterator[psycopg.Connection]:
-    conn = connect(config.database_url())
-    try:
-        yield conn
-    finally:
-        conn.close()
+@app.exception_handler(auth.Refused)
+def sign_in_refused(_request: Request, exc: auth.Refused) -> JSONResponse:
+    return JSONResponse({"detail": str(exc)}, status_code=exc.status)
+
+
+@app.exception_handler(auth.NotConfigured)
+def sign_in_not_configured(_request: Request, exc: auth.NotConfigured) -> JSONResponse:
+    return JSONResponse({"detail": str(exc)}, status_code=503)
+
+
+app.include_router(auth_router)
 
 
 def _secret_matches(given: str | None, expected: str | None) -> bool:
     return bool(given and expected) and hmac.compare_digest(given.encode(), expected.encode())
-
-
-def require_session(request: Request) -> None:
-    header = request.headers.get("Authorization", "")
-    token = header.removeprefix("Bearer ") if header.startswith("Bearer ") else None
-    if not _secret_matches(token, os.environ.get("CREED_API_TOKEN")):
-        raise HTTPException(status_code=401, detail="Sign in first.")
 
 
 def require_cron(request: Request) -> None:
@@ -73,10 +85,6 @@ def require_cron(request: Request) -> None:
     token = header.removeprefix("Bearer ") if header.startswith("Bearer ") else None
     if not _secret_matches(token, os.environ.get("CREED_CRON_SECRET")):
         raise HTTPException(status_code=401, detail="Not allowed.")
-
-
-Session = Annotated[None, Depends(require_session)]
-Conn = Annotated[psycopg.Connection, Depends(get_conn)]
 
 
 def _today(tz_name: str) -> date:

@@ -233,6 +233,79 @@ p {
   font-size: 16px;
 }
 
+/* Rows in a card, the way a phone's settings are laid out. */
+.list {
+  display: flex;
+  flex-direction: column;
+  border-radius: 8px;
+  background: var(--card);
+}
+
+.list-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 52px;
+  padding: 4px 12px;
+}
+
+.list-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+}
+
+.list-row + .list-row,
+.list-block + .list-block {
+  border-top: 1px solid var(--line);
+}
+
+.list-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.primary-button,
+.secondary-button {
+  display: block;
+  width: 100%;
+  height: 52px;
+  border-radius: 8px;
+  font: 800 18px/1 var(--display);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.primary-button {
+  border: 0;
+  background: var(--ink);
+  color: var(--bg);
+}
+
+.secondary-button {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--ink);
+}
+
+.primary-button:disabled,
+.secondary-button:disabled {
+  opacity: 0.4;
+}
+
+.text-button {
+  min-height: 44px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-2);
+  font: 500 14px/1.2 var(--body);
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;

@@ -139,7 +139,7 @@
     </div>
   </div>
 
-  <StatusNote resource={res} what="this screen" />
+  <StatusNote resource={res} />
 
   {#if data}
     <div class="sections" class:refreshing={res.loading}>

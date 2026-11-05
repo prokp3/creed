@@ -2,6 +2,7 @@
   // Each change saves on its own, the way a phone's settings do. There's no Save button.
   import Icon from '../components/Icon.svelte';
   import Screen from '../components/Screen.svelte';
+  import SignInSettings from '../components/SignInSettings.svelte';
   import StatusNote from '../components/StatusNote.svelte';
   import { put } from '../lib/api.js';
   import { to12Hour, to24Hour, whole } from '../lib/format.js';
@@ -61,7 +62,7 @@
     <span class="saved" class:show={saved} role="status">{saved ? 'Saved' : ''}</span>
   </div>
 
-  <StatusNote resource={res} what="your settings" />
+  <StatusNote resource={res} />
 
   {#if problem}
     <div class="gutter"><div class="card attention" role="alert">{problem}</div></div>
@@ -70,12 +71,12 @@
   {#if s}
     <section class="gutter stack">
       <h2 class="section-heading">Race</h2>
-      <div class="group">
-        <div class="row">
+      <div class="list">
+        <div class="list-row">
           <label for="race-date">Race date</label>
           <input id="race-date" class="field" type="date" value={s.race_date} onchange={(e) => change({ race_date: e.currentTarget.value })} />
         </div>
-        <div class="row">
+        <div class="list-row">
           <label for="zone">Time zone</label>
           <select id="zone" class="field zone" onchange={(e) => change({ timezone: e.currentTarget.value })}>
             {#each zoneChoices as zone (zone)}
@@ -89,16 +90,16 @@
 
     <section class="gutter stack">
       <h2 class="section-heading">Heart rate</h2>
-      <div class="group">
-        <div class="row-block">
-          <div class="row-inner">
+      <div class="list">
+        <div class="list-block">
+          <div class="list-inner">
             <label for="max-hr">Max HR</label>
             <input id="max-hr" class="field number" type="number" inputmode="numeric" value={s.max_hr ?? ''} placeholder={s.estimates.max_hr === null ? '' : whole(s.estimates.max_hr)} aria-describedby="max-hr-note" onchange={(e) => heartRate('max_hr', e)} />
           </div>
           <p id="max-hr-note" class="note">{usingEstimate('max_hr') ? `${s.estimates.max_hr_source} Enter a number to replace it.` : 'Set by you. Clear it to use the estimate again.'}</p>
         </div>
-        <div class="row-block">
-          <div class="row-inner">
+        <div class="list-block">
+          <div class="list-inner">
             <label for="resting-hr">Resting HR</label>
             <input id="resting-hr" class="field number" type="number" inputmode="numeric" value={s.resting_hr ?? ''} placeholder={s.estimates.resting_hr === null ? '' : whole(s.estimates.resting_hr)} aria-describedby="resting-hr-note" onchange={(e) => heartRate('resting_hr', e)} />
           </div>
@@ -120,12 +121,12 @@
 
     <section class="gutter stack">
       <h2 class="section-heading">Notifications</h2>
-      <div class="group">
-        <div class="row">
+      <div class="list">
+        <div class="list-row">
           <span id="n-recovery">Recovery is ready</span>
           <button class="switch" role="switch" aria-labelledby="n-recovery" aria-checked={s.notify_recovery} onclick={() => change({ notify_recovery: !s.notify_recovery })}><i></i></button>
         </div>
-        <div class="row">
+        <div class="list-row">
           <span>Time</span>
           <div class="clock">
             <label class="visually-hidden" for="n-hour">Hour</label>
@@ -143,11 +144,11 @@
             </select>
           </div>
         </div>
-        <div class="row">
+        <div class="list-row">
           <span id="n-key">Garmin key expiring soon</span>
           <button class="switch" role="switch" aria-labelledby="n-key" aria-checked={s.notify_key_expiring} onclick={() => change({ notify_key_expiring: !s.notify_key_expiring })}><i></i></button>
         </div>
-        <div class="row">
+        <div class="list-row">
           <span id="n-sync">Sync failed</span>
           <button class="switch" role="switch" aria-labelledby="n-sync" aria-checked={s.notify_sync_failed} onclick={() => change({ notify_sync_failed: !s.notify_sync_failed })}><i></i></button>
         </div>
@@ -157,9 +158,9 @@
 
     <section class="gutter stack">
       <h2 class="section-heading">Garmin key</h2>
-      <div class="group">
-        <div class="row-block">
-          <div class="row-inner">
+      <div class="list">
+        <div class="list-block">
+          <div class="list-inner">
             <label for="key-expiry">Expires on</label>
             <input id="key-expiry" class="field" type="date" value={s.garmin_key_expires ?? ''} aria-describedby="key-note" onchange={(e) => change({ garmin_key_expires: e.currentTarget.value || null })} />
           </div>
@@ -167,6 +168,8 @@
         </div>
       </div>
     </section>
+
+    <SignInSettings {active} {freshness} timeZone={s.timezone} />
   {/if}
 </Screen>
 
@@ -197,41 +200,6 @@
 
   .saved.show {
     opacity: 1;
-  }
-
-  .group {
-    display: flex;
-    flex-direction: column;
-    border-radius: 8px;
-    background: var(--card);
-  }
-
-  .row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    min-height: 52px;
-    padding: 4px 12px;
-  }
-
-  .row-block {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding: 10px 12px;
-  }
-
-  .row + .row,
-  .row-block + .row-block {
-    border-top: 1px solid var(--line);
-  }
-
-  .row-inner {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
   }
 
   .zone {
