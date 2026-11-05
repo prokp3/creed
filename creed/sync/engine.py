@@ -13,11 +13,12 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Any
 
-from creed.db.store import Cursor, Store
+from creed.db.store import Batch, Cursor, Store
 from creed.garmin import api
 from creed.garmin.api import ApiError, SchemaChanged
 from creed.garmin.client import ApiStopped, AuthFailed, Client
-from creed.garmin.fit import read_activity_zip
+from creed.garmin.fit import read_activity_zip, read_samples, unzip_fit
+from creed.metrics.derive import derive
 from creed.sync import normalize
 from creed.sync.normalize import BadRecord, Flag
 
@@ -32,6 +33,8 @@ HISTORY_MARGIN_DAYS = 31
 ACTIVITIES = "activities"
 PROFILE = "profile"
 MAX_FILE_ATTEMPTS = 3
+# Raise this when derive() changes, and every activity is recalculated on the next run.
+DERIVE_VERSION = 3
 
 
 class _WindowShrunk(Exception):
@@ -48,38 +51,48 @@ class SyncResult:
     errors: list[dict[str, Any]] = field(default_factory=list)
 
 
-def _ingest_daily(store: Store, row: dict) -> date | None:
+def _parse_daily(batch: Batch, row: dict) -> date | None:
     record = normalize.daily_summary(row)
     key = record.calendar_date.isoformat()
     if record.metrics:
-        store.save_raw("daily_summary", key, SOURCE, row)
-    store.replace_day_metrics(record.calendar_date, SOURCE, normalize.DAILY_METRICS, record.metrics)
-    store.replace_flags("daily", key, record.flags)
+        batch.raw[("daily_summary", key)] = row
+    batch.add_metrics(record.calendar_date, normalize.DAILY_METRICS, record.metrics)
+    batch.add_flags("daily", key, record.flags)
     return record.calendar_date if record.has_data else None
 
 
-def _ingest_hrv(store: Store, row: dict) -> date | None:
+def _parse_hrv(batch: Batch, row: dict) -> date | None:
     record = normalize.hrv_summary(row)
     key = record.calendar_date.isoformat()
     if record.metrics:
-        store.save_raw("hrv_summary", key, SOURCE, row)
-    store.replace_day_metrics(record.calendar_date, SOURCE, normalize.HRV_METRICS, record.metrics)
-    store.replace_flags("hrv", key, record.flags)
+        batch.raw[("hrv_summary", key)] = row
+    batch.add_metrics(record.calendar_date, normalize.HRV_METRICS, record.metrics)
+    batch.add_flags("hrv", key, record.flags)
     return record.calendar_date if record.has_data else None
 
 
-def _ingest_sleep(store: Store, row: dict) -> date | None:
+def _parse_sleep(batch: Batch, row: dict) -> date | None:
     parsed = normalize.sleep_night(row)
     day = normalize.parse_date(row.get("calendarDate"))
+    key = day.isoformat()
     if parsed is None:
-        store.delete_sleep(day, SOURCE)
-        store.replace_flags("sleep", day.isoformat(), [])
+        batch.sleep_removed.add(day)
+        batch.add_flags("sleep", key, [])
         return None
     values, flags = parsed
-    store.save_raw("sleep_summary", day.isoformat(), SOURCE, row)
-    store.upsert_sleep(values, SOURCE)
-    store.replace_flags("sleep", day.isoformat(), flags)
+    batch.raw[("sleep_summary", key)] = row
+    batch.sleep[day] = values
+    batch.add_flags("sleep", key, flags)
     return day
+
+
+def _parse_activity(batch: Batch, row: dict) -> date | None:
+    values, flags = normalize.activity(row)
+    key = str(values["activity_id"])
+    batch.raw[("activity", key)] = row
+    batch.activities[values["activity_id"]] = values
+    batch.add_flags("activity", key, flags)
+    return values["local_date"]
 
 
 @dataclass(frozen=True)
@@ -87,13 +100,13 @@ class RangeSet:
     name: str
     first_window: int  # The widest window measured to work on a real account.
     fetch: Callable[[Client, date, date], list[dict]]
-    ingest: Callable[[Store, dict], date | None]
+    parse: Callable[[Batch, dict], date | None]
 
 
 RANGE_SETS = (
-    RangeSet("daily_summary", 365, api.daily_summaries, _ingest_daily),
-    RangeSet("hrv_summary", 365, api.hrv_summaries, _ingest_hrv),
-    RangeSet("sleep_summary", 31, api.sleep_summaries, _ingest_sleep),
+    RangeSet("daily_summary", 365, api.daily_summaries, _parse_daily),
+    RangeSet("hrv_summary", 365, api.hrv_summaries, _parse_hrv),
+    RangeSet("sleep_summary", 31, api.sleep_summaries, _parse_sleep),
 )
 # Daily summaries go first: where they start tells the others how far back to look.
 HISTORY_ANCHOR = RANGE_SETS[0].name
@@ -120,14 +133,15 @@ class _Run:
                 "message": self.client.redact(str(exc)),
             })
 
-    def _ingest_rows(self, name: str, ingest: Callable[[Store, dict], date | None], rows: list[dict],
+    def _ingest_rows(self, name: str, parse: Callable[[Batch, dict], date | None], rows: list[dict],
                      ref: str, cursor: Cursor) -> bool:
+        """Parse a window of records, then write them together. One bad record doesn't cost the others."""
+        batch = Batch()
         any_data = False
         unreadable = 0
         for row in rows:
             try:
-                with self.store.conn.transaction():
-                    day = ingest(self.store, row)
+                day = parse(batch, row)
             except (BadRecord, TypeError, ValueError, AttributeError):
                 unreadable += 1
                 continue
@@ -137,7 +151,8 @@ class _Run:
                 if cursor.first_data_date is None or day < cursor.first_data_date:
                     cursor.first_data_date = day
         flags = [Flag("unreadable_records", "problem", f"{unreadable} records couldn't be read.")] if unreadable else []
-        self.store.replace_flags("sync", f"{name}:{ref}", flags)
+        batch.add_flags("sync", f"{name}:{ref}", flags)
+        self.store.write_batch(batch, SOURCE)
         return any_data
 
     def _fetch(self, ds: RangeSet, cursor: Cursor, start: date, end: date) -> list[dict]:
@@ -167,7 +182,7 @@ class _Run:
                 rows = self._fetch(ds, cursor, day, end)
             except _WindowShrunk:
                 continue
-            self._ingest_rows(ds.name, ds.ingest, rows, end.isoformat(), cursor)
+            self._ingest_rows(ds.name, ds.parse, rows, end.isoformat(), cursor)
             cursor.newest_date = end
             self.store.save_cursor(cursor)
             self.store.commit()
@@ -197,7 +212,7 @@ class _Run:
                 rows = self._fetch(ds, cursor, start, end)
             except _WindowShrunk:
                 continue
-            had_data = self._ingest_rows(ds.name, ds.ingest, rows, end.isoformat(), cursor)
+            had_data = self._ingest_rows(ds.name, ds.parse, rows, end.isoformat(), cursor)
             cursor.oldest_date = start
             cursor.empty_days = 0 if had_data else cursor.empty_days + (end - start).days + 1
             if floor is None and cursor.empty_days >= EMPTY_STOP_DAYS:
@@ -207,18 +222,10 @@ class _Run:
         self.store.save_cursor(cursor)
         self.store.commit()
 
-    def _ingest_activity(self, store: Store, row: dict) -> date | None:
-        values, flags = normalize.activity(row)
-        key = str(values["activity_id"])
-        store.save_raw("activity", key, SOURCE, row)
-        store.upsert_activity(values, SOURCE)
-        store.replace_flags("activity", key, flags)
-        return values["local_date"]
-
     def activities_latest(self) -> None:
         cursor = self.store.get_cursor(ACTIVITIES)
         rows = api.activities_page(self.client, 0)
-        self._ingest_rows(ACTIVITIES, self._ingest_activity, rows, "latest", cursor)
+        self._ingest_rows(ACTIVITIES, _parse_activity, rows, "latest", cursor)
         cursor.newest_date = self.today
         if cursor.page_offset == 0:
             cursor.page_offset = len(rows)
@@ -231,7 +238,7 @@ class _Run:
         while not cursor.backfill_done:
             rows = api.activities_page(self.client, cursor.page_offset)
             # The server may cap a page below the size asked for, so only an empty page ends this.
-            self._ingest_rows(ACTIVITIES, self._ingest_activity, rows, f"page-{cursor.page_offset}", cursor)
+            self._ingest_rows(ACTIVITIES, _parse_activity, rows, f"page-{cursor.page_offset}", cursor)
             cursor.page_offset += len(rows)
             cursor.backfill_done = not rows
             self.store.save_cursor(cursor)
@@ -260,12 +267,36 @@ class _Run:
             self.records += 1
         self.store.commit()
 
+    def derive_activities(self) -> None:
+        """Read each new FIT file once and keep the numbers the metrics need."""
+        while True:
+            pending = self.store.activity_files_to_derive(DERIVE_VERSION, 20)
+            if not pending:
+                return
+            rows = []
+            for item in pending:
+                fit = unzip_fit(bytes(item["content"]))
+                samples, _ = read_samples(fit) if fit else ([], None)
+                result = derive(samples, item["discipline"], item["type_key"])
+                rows.append({
+                    "activity_id": item["activity_id"], "derive_version": DERIVE_VERSION,
+                    "samples": result.samples, "hr_coverage": result.hr_coverage,
+                    "hr_seconds": {str(k): v for k, v in result.hr_seconds.items()},
+                    "steady": result.steady, "efficiency": result.efficiency,
+                    "decoupling_pct": result.decoupling_pct, "steady_speed_mps": result.steady_speed_mps,
+                    "steady_hr": result.steady_hr,
+                })
+            self.store.save_derived(rows)
+            self.store.commit()
+
     def profile(self) -> None:
         cursor = self.store.get_cursor(PROFILE)
         if cursor.newest_date == self.today:
             return
-        self.store.save_raw("heart_rate_zones", "current", SOURCE, api.heart_rate_zones(self.client))
-        self.store.save_raw("profile_settings", "current", SOURCE, api.profile_settings(self.client))
+        batch = Batch()
+        batch.raw[("heart_rate_zones", "current")] = api.heart_rate_zones(self.client)
+        batch.raw[("profile_settings", "current")] = api.profile_settings(self.client)
+        self.store.write_batch(batch, SOURCE)
         cursor.newest_date = self.today
         cursor.backfill_done = True
         self.store.save_cursor(cursor)
@@ -273,6 +304,7 @@ class _Run:
 
 
 def run_sync(store: Store, client: Client, *, today: date, trigger: str = "manual") -> SyncResult:
+    store.close_abandoned_runs()
     run_id = store.start_run(trigger)
     store.commit()
     run = _Run(store, client, today)
@@ -293,6 +325,7 @@ def run_sync(store: Store, client: Client, *, today: date, trigger: str = "manua
             run.guarded(f"{ds.name} history", lambda ds=ds: run.backfill(ds))
         run.guarded(f"{ACTIVITIES} history", run.activities_backfill)
         run.guarded("activity_file", run.download_files)
+        run.derive_activities()
     except AuthFailed as exc:
         store.rollback()
         status, message = "auth_failed", client.redact(str(exc))

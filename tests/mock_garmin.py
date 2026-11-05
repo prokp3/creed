@@ -14,7 +14,7 @@ import threading
 import time
 import urllib.parse
 import zipfile
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
@@ -71,7 +71,8 @@ def build_activity_zip() -> bytes:
 
 
 def ms(dt: datetime) -> int:
-    return int(dt.timestamp() * 1000)
+    """Epoch milliseconds that read as the wall clock when taken as UTC, the way Garmin sends them."""
+    return int(dt.replace(tzinfo=timezone.utc).timestamp() * 1000)
 
 
 class MockGarmin:

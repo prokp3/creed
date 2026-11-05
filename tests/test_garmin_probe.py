@@ -122,7 +122,8 @@ class FullRun(unittest.TestCase):
         checks = self.summary["sleep_checks"]
         self.assertGreater(checks["nights"], 100)
         self.assertEqual(checks["calendar_is_wake_date"], checks["nights"])
-        self.assertEqual(checks["calendar_is_bed_date"], 0)
+        # Only the fake watch's 2-hour nights start after midnight, so they match both dates.
+        self.assertEqual(checks["calendar_is_bed_date"], checks["under_3_hours"])
         self.assertEqual(checks["local_minus_gmt_hours"], {"5.5": checks["nights"]})
         self.assertGreater(checks["under_3_hours"], 0)
 

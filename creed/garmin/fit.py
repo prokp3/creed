@@ -1,7 +1,8 @@
-"""A small FIT reader: structure and field coverage only, field values are not kept.
+"""A small FIT reader for structure, field coverage and the samples the metrics need.
 
-Used to check what a file contains and to flag sensor dropouts. Bad input yields
-parse_error, never a crash. Files are read in memory and never extracted to disk.
+read_fit keeps no field values, and read_samples returns only heart rate, speed, distance
+and power. Position is never decoded. Bad input yields a parse error, never a crash. Files
+are read in memory and never extracted to disk.
 """
 from __future__ import annotations
 
@@ -9,6 +10,7 @@ import io
 import statistics
 import zipfile
 from collections import Counter, defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -39,13 +41,23 @@ FIT_SESSION_FIELDS = {
     137: "total_anaerobic_training_effect",
 }
 FIT_MSG_RECORD, FIT_MSG_SESSION, FIT_MSG_PHYSIO = 20, 18, 140
+FIELD_HEART_RATE, FIELD_DISTANCE, FIELD_SPEED, FIELD_POWER, FIELD_ENHANCED_SPEED = 3, 5, 6, 7, 73
+STREAM_FIELDS = {FIELD_HEART_RATE, FIELD_DISTANCE, FIELD_SPEED, FIELD_POWER, FIELD_ENHANCED_SPEED}
 
 
-def read_fit(data: bytes) -> dict[str, Any]:
-    """Count messages and valid fields in a FIT file."""
-    messages: Counter = Counter()
-    valid_fields: dict[int, Counter] = defaultdict(Counter)
-    record_times: list[int] = []
+@dataclass(frozen=True)
+class Sample:
+    """One recorded moment. Position is deliberately not read."""
+
+    timestamp: int  # Seconds since the FIT epoch.
+    heart_rate: int | None = None
+    speed_mps: float | None = None
+    distance_m: float | None = None
+    power: int | None = None
+
+
+def _walk_fit(data: bytes, messages: Counter, valid_fields: dict[int, Counter], record_times: list[int],
+              samples: list[Sample] | None = None) -> dict[str, Any]:
     result: dict[str, Any] = {"parse_error": None, "truncated": False, "fit_files": 0}
     pos = 0
     try:
@@ -61,13 +73,40 @@ def read_fit(data: bytes) -> dict[str, Any]:
             if end > len(data):
                 result["truncated"] = True
                 end = len(data)
-            _read_fit_records(data, start, end, messages, valid_fields, record_times)
+            _read_fit_records(data, start, end, messages, valid_fields, record_times, samples)
             result["fit_files"] += 1
             pos = end + 2
         if result["fit_files"] == 0:
             raise ValueError("file too short")
     except (IndexError, ValueError, KeyError) as exc:
         result["parse_error"] = f"{type(exc).__name__}: {exc}"
+    return result
+
+
+def read_samples(data: bytes) -> tuple[list[Sample], str | None]:
+    """The recording's samples, and a parse error if the file couldn't be read in full."""
+    samples: list[Sample] = []
+    result = _walk_fit(data, Counter(), defaultdict(Counter), [], samples)
+    return samples, result["parse_error"]
+
+
+def unzip_fit(content: bytes) -> bytes | None:
+    """The FIT file inside Garmin's ZIP, in memory. Plain FIT bytes pass through."""
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(content))
+    except zipfile.BadZipFile:
+        return content
+    with archive:
+        fits = [i for i in archive.infolist() if i.filename.lower().endswith(".fit") and i.file_size <= MAX_FIT_BYTES]
+        return archive.read(max(fits, key=lambda i: i.file_size)) if fits else None
+
+
+def read_fit(data: bytes) -> dict[str, Any]:
+    """Count messages and valid fields in a FIT file."""
+    messages: Counter = Counter()
+    valid_fields: dict[int, Counter] = defaultdict(Counter)
+    record_times: list[int] = []
+    result = _walk_fit(data, messages, valid_fields, record_times)
 
     record_count = messages.get(FIT_MSG_RECORD, 0)
     deltas = [b - a for a, b in zip(record_times, record_times[1:]) if b >= a]
@@ -97,6 +136,7 @@ def _read_fit_records(
     messages: Counter,
     valid_fields: dict[int, Counter],
     record_times: list[int],
+    samples: list[Sample] | None = None,
 ) -> None:
     definitions: dict[int, tuple[int, str, list[tuple[int, int, int]], int]] = {}
     last_ts: int | None = None
@@ -134,6 +174,7 @@ def _read_fit_records(
             return  # Trailing partial message in a truncated file.
         messages[global_num] += 1
         ts: int | None = None
+        values: dict[int, int] = {}
         for num, size, base in fields:
             raw = data[p : p + size]
             p += size
@@ -141,6 +182,8 @@ def _read_fit_records(
                 valid_fields[global_num][num] += 1
                 if num == 253 and size == 4:
                     ts = int.from_bytes(raw, byteorder)
+                elif samples is not None and global_num == FIT_MSG_RECORD and num in STREAM_FIELDS:
+                    values[num] = int.from_bytes(raw, byteorder)
         p += dev_size
         if ts is None and compressed_offset is not None and last_ts is not None:
             ts = (last_ts & ~0x1F) | compressed_offset
@@ -150,6 +193,21 @@ def _read_fit_records(
             last_ts = ts
             if global_num == FIT_MSG_RECORD:
                 record_times.append(ts)
+                if samples is not None:
+                    samples.append(_sample(ts, values))
+
+
+def _sample(ts: int, values: dict[int, int]) -> Sample:
+    # Scales from the FIT profile: speed in mm/s, distance in cm. Enhanced speed is preferred.
+    speed = values.get(FIELD_ENHANCED_SPEED, values.get(FIELD_SPEED))
+    distance = values.get(FIELD_DISTANCE)
+    return Sample(
+        timestamp=ts,
+        heart_rate=values.get(FIELD_HEART_RATE),
+        speed_mps=None if speed is None else speed / 1000,
+        distance_m=None if distance is None else distance / 100,
+        power=values.get(FIELD_POWER),
+    )
 
 
 def _fit_field_valid(raw: bytes, base: int, byteorder: str) -> bool:

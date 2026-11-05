@@ -2,7 +2,7 @@
 
 A personal triathlon dashboard built from your own Garmin data, installed on your iPhone's home screen as a web app.
 
-**Status: early development.** The data-availability probe and the Garmin sync work. The metrics, dashboard, login, notifications and full deploy guide will be added here as they are built.
+**Status: early development.** The data-availability probe, the Garmin sync and the metrics work. The API, dashboard, login, notifications and full deploy guide will be added here as they are built.
 
 ## Set up for development
 
@@ -45,6 +45,18 @@ Run all the tests. They start their own temporary Postgres, so they need no acco
 - **Sources:** each row records whether it came from the API, the account export or a manual entry, so those can be added without changing the schema.
 - **Nothing is filled in.** A day with no data has no row. Values that fail validation are kept but flagged, and metrics leave them out.
 - **Server side only.** Row-level security is on for every table with no policies, and Supabase's public API roles have no access.
+
+## Metrics
+
+The metrics live in `creed/metrics/`, with no web or database code, and every formula is tested against a hand-worked example. Each one reports its formula, inputs, window, confidence and citation, and says so plainly when there isn't enough data rather than guessing. To add a metric, write one module with a `compute(ctx)` function and list it in `creed/metrics/__init__.py`.
+
+Values tagged Computed are this project's own and don't try to match Garmin or Whoop. Whoop's algorithm is proprietary and isn't replicated. Values tagged Garmin are shown unmodified.
+
+To check the metrics against your own history, run this. It prints aggregates of your health data to the screen and saves nothing:
+
+```bash
+.venv/Scripts/python tools/backtest.py
+```
 
 ## Check what your Garmin account can provide
 

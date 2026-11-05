@@ -233,6 +233,117 @@ class TestFailures:
         assert flag == {"code": "unreadable_records"}
 
 
+class TestDerived:
+    def test_each_file_is_read_once_and_its_numbers_kept(self, store):
+        with MockGarmin(TODAY, history_days=20) as server:
+            sync(server, store)
+            count = store.conn.execute("select count(*) as n from activity_derived").fetchone()["n"]
+            assert count == counts(store)["activity_file"]
+            before = store.conn.execute("select max(updated_at) as t from activity_derived").fetchone()["t"]
+            sync(server, store)
+            assert store.conn.execute("select max(updated_at) as t from activity_derived").fetchone()["t"] == before
+
+    def test_heart_rate_time_comes_from_the_file(self, store):
+        with MockGarmin(TODAY, history_days=4) as server:
+            sync(server, store)
+        row = store.conn.execute("select samples, hr_coverage, hr_seconds from activity_derived limit 1").fetchone()
+        # The fake file has 4 samples 2 s apart at 140, 142, dropout and 144 bpm.
+        assert row["samples"] == 4
+        assert row["hr_coverage"] == 0.75
+        assert row["hr_seconds"] == {"140": 2, "142": 2}
+
+    def test_raising_the_version_recalculates(self, store, monkeypatch):
+        with MockGarmin(TODAY, history_days=4) as server:
+            sync(server, store)
+            monkeypatch.setattr("creed.sync.engine.DERIVE_VERSION", 99)
+            sync(server, store)
+        versions = store.conn.execute("select distinct derive_version from activity_derived").fetchall()
+        assert versions == [{"derive_version": 99}]
+
+
+class TestMetricsFromDatabase:
+    def test_load_context_feeds_every_metric(self, store):
+        from creed.db.reads import load_context
+        from creed.metrics import compute_all
+        with MockGarmin(TODAY, history_days=100, hrv_days=60) as server:
+            sync(server, store)
+        ctx = load_context(store.conn, TODAY)
+        assert TODAY in ctx.hrv
+        assert ctx.resting_hr[TODAY] == 52
+        assert len(ctx.activities) == 50
+        results = compute_all(ctx)
+        assert results["fitness"].state == "ok"
+        assert results["strain"].details["max_hr"] == 178
+
+    def test_flagged_values_never_reach_the_metrics(self, store):
+        from creed.db.reads import load_context
+        store.replace_day_metrics(TODAY, "api", ["resting_hr"], [Metric("resting_hr", value_num=300, quality="flagged")])
+        store.commit()
+        assert TODAY not in load_context(store.conn, TODAY).resting_hr
+
+    def test_local_time_is_worked_out_from_the_stored_offset(self, store):
+        from creed.db.reads import load_context
+        with MockGarmin(TODAY, history_days=4) as server:
+            sync(server, store)
+        night = next(n for n in load_context(store.conn, TODAY).sleep if n.day == TODAY)
+        assert night.end_local_minutes == 6 * 60 + 30  # The fake watch wakes at 06:30 local time.
+
+
+class CountingConnection:
+    """Counts statements, because each one is a network trip to the real database."""
+
+    def __init__(self, conn) -> None:
+        self._conn = conn
+        self.statements = 0
+
+    def execute(self, *args, **kwargs):
+        self.statements += 1
+        return self._conn.execute(*args, **kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+
+class TestSpeed:
+    def test_a_year_of_daily_data_takes_few_database_trips(self, store):
+        """At about 45 ms per trip, row-by-row writes overran the function time limit on real data."""
+        counting = CountingConnection(store.conn)
+        store.conn = counting
+        with MockGarmin(TODAY, history_days=365) as server:
+            client = client_for(server, store)
+            from creed.garmin import api
+            from creed.sync.engine import _parse_daily, _Run
+            run = _Run(store, client, TODAY)
+            rows = api.daily_summaries(client, TODAY - timedelta(days=364), TODAY)
+            assert len(rows) == 365
+            cursor = store.get_cursor("daily_summary")
+            before = counting.statements
+            run._ingest_rows("daily_summary", _parse_daily, rows, "test", cursor)
+            store.commit()
+        assert counting.statements - before <= 15
+        assert metric(store, TODAY - timedelta(days=364), "resting_hr") == 52
+
+    def test_a_record_repeated_in_one_response_does_not_break_the_write(self, store):
+        from creed.sync.engine import _parse_daily, _Run
+        with MockGarmin(TODAY) as server:
+            run = _Run(store, client_for(server, store), TODAY)
+            row = server.v2_row(TODAY)
+            run._ingest_rows("daily_summary", _parse_daily, [row, row], "test", store.get_cursor("daily_summary"))
+            store.commit()
+        assert metric(store, TODAY, "resting_hr") == 52
+
+    def test_a_run_killed_from_outside_is_closed_by_the_next_one(self, store):
+        store.conn.execute("insert into sync_run (trigger, started_at) values ('killed', now() - interval '1 hour')")
+        store.conn.execute("insert into sync_run (trigger) values ('still-going')")
+        store.commit()
+        with MockGarmin(TODAY, history_days=10) as server:
+            sync(server, store)
+        rows = {r["trigger"]: r for r in store.conn.execute("select trigger, status, message from sync_run").fetchall()}
+        assert rows["killed"]["status"] == "failed"
+        assert "cut off" in rows["killed"]["message"]
+        assert rows["still-going"]["status"] == "running"
+
+
 class TestToken:
     def test_a_saved_token_is_reused_across_runs(self, store):
         with MockGarmin(TODAY, history_days=10) as server:
@@ -292,7 +403,7 @@ class TestQuality:
 
 class TestSchema:
     def test_migrating_twice_changes_nothing(self, conn):
-        assert migrate(conn) == ["0001_init.sql"]
+        assert migrate(conn) == ["0001_init.sql", "0002_activity_derived.sql"]
         assert migrate(conn) == []
 
     def test_every_table_has_row_level_security(self, store):
