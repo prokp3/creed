@@ -57,7 +57,7 @@ def quality_summary(conn: psycopg.Connection) -> list[dict[str, Any]]:
 def latest_run(conn: psycopg.Connection) -> dict[str, Any] | None:
     return conn.execute(
         "select status, trigger, started_at, finished_at, requests, records, backfill_pending, message "
-        "from sync_run order by id desc limit 1"
+        "from sync_run where trigger is distinct from 'export' order by id desc limit 1"
     ).fetchone()
 
 
@@ -71,7 +71,8 @@ def sync_running(conn: psycopg.Connection, within_minutes: int) -> bool:
 
 def last_good_run(conn: psycopg.Connection) -> datetime | None:
     row = conn.execute(
-        "select max(finished_at) as finished_at from sync_run where status in ('ok', 'partial')"
+        "select max(finished_at) as finished_at from sync_run where status in ('ok', 'partial') "
+        "and trigger is distinct from 'export'"
     ).fetchone()
     return row["finished_at"]
 

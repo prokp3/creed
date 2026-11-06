@@ -2,7 +2,7 @@
 
 A personal triathlon dashboard built from your own Garmin data. It installs on your iPhone's home screen and works like an app, with Face ID sign-in. It was built for training towards IRONMAN 70.3 Goa, and the race date is a setting you can change.
 
-**Status: early development, in daily use.** It runs on Vercel and is used on a real iPhone. Notifications, the account-export importer and themes are still to come; see [Roadmap](#roadmap).
+**Status: early development, in daily use.** It runs on Vercel and is used on a real iPhone. Notifications and themes are still to come; see [Roadmap](#roadmap).
 
 ## What it does
 
@@ -106,6 +106,18 @@ A sync stops after 150 requests or 240 seconds, so the first one may not bring i
 2. GitHub turns schedules off on forks, so open the **Actions** tab and enable workflows.
 3. Choose **Sync Garmin data**, then **Run workflow**, to check it works.
 
+### 7. Optionally, import your Garmin history
+
+Garmin's API only goes back so far. To bring in everything Garmin holds, request your data from Garmin's **Export Your Data** page in your account settings. Garmin emails you a link to a zip, usually within a few days.
+
+Don't upload the zip anywhere. Put it, unopened, in a folder called `exports` in your copy of this project, which git ignores. Then run:
+
+```bash
+.venv/Scripts/python -m creed.sync.export
+```
+
+It reads the newest zip in `exports/` and brings in daily summaries, sleep and overnight HRV. Where the API already has a day, the API's version is kept, and running it again changes nothing. It ends with a report of how many days it found and how many were new. Activities come from the API, so it only counts any that are missing.
+
 That's it. From now on, Creed syncs on its own. Change the race date, time zone and heart-rate settings in **Settings**, behind the gear on Today.
 
 ## How syncing works
@@ -187,7 +199,6 @@ The server uses whichever database `DATABASE_URL` points at, so a passkey you ma
 ## Roadmap
 
 - **Notifications:** "Recovery is ready", "Garmin key expiring soon" and "Sync failed". The settings for them are already there.
-- **Account-export importer:** bring in older history from Garmin's export file.
 - **A full Data Quality page.**
 - **Themes.**
 - **A hosted version for everyone.** Later, I plan to host Creed on my own server so that anyone can create an account with an ID and password, connect their own Garmin, and use it without setting anything up. Connecting other people's Garmin accounts needs Garmin's approval through its Connect Developer Program, because the Personal API this version uses is only for your own data. Creed will never ask for your Garmin password. Until then, follow [Run your own Creed](#run-your-own-creed).

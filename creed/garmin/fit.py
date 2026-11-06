@@ -70,7 +70,8 @@ class TrackPoint:
 
 
 def _walk_fit(data: bytes, messages: Counter, valid_fields: dict[int, Counter], record_times: list[int],
-              samples: list[Sample] | None = None, track: list[TrackPoint] | None = None) -> dict[str, Any]:
+              samples: list[Sample] | None = None, track: list[TrackPoint] | None = None,
+              collect: dict[int, list[dict[int, int]]] | None = None) -> dict[str, Any]:
     result: dict[str, Any] = {"parse_error": None, "truncated": False, "fit_files": 0}
     pos = 0
     try:
@@ -86,7 +87,7 @@ def _walk_fit(data: bytes, messages: Counter, valid_fields: dict[int, Counter], 
             if end > len(data):
                 result["truncated"] = True
                 end = len(data)
-            _read_fit_records(data, start, end, messages, valid_fields, record_times, samples, track)
+            _read_fit_records(data, start, end, messages, valid_fields, record_times, samples, track, collect)
             result["fit_files"] += 1
             pos = end + 2
         if result["fit_files"] == 0:
@@ -108,6 +109,13 @@ def read_track(data: bytes) -> tuple[list[TrackPoint], str | None]:
     track: list[TrackPoint] = []
     result = _walk_fit(data, Counter(), defaultdict(Counter), [], None, track)
     return track, result["parse_error"]
+
+
+def read_messages(data: bytes, global_num: int) -> tuple[list[dict[int, int]], str | None]:
+    """Every message of one type, as {field number: raw unsigned value}, valid fields only, with its timestamp as 253."""
+    found: dict[int, list[dict[int, int]]] = {global_num: []}
+    result = _walk_fit(data, Counter(), defaultdict(Counter), [], None, None, found)
+    return found[global_num], result["parse_error"]
 
 
 def unzip_fit(content: bytes) -> bytes | None:
@@ -158,6 +166,7 @@ def _read_fit_records(
     record_times: list[int],
     samples: list[Sample] | None = None,
     track: list[TrackPoint] | None = None,
+    collect: dict[int, list[dict[int, int]]] | None = None,
 ) -> None:
     definitions: dict[int, tuple[int, str, list[tuple[int, int, int]], int]] = {}
     last_ts: int | None = None
@@ -196,11 +205,14 @@ def _read_fit_records(
         messages[global_num] += 1
         ts: int | None = None
         values: dict[int, int] = {}
+        wanted: dict[int, int] | None = {} if collect is not None and global_num in collect else None
         for num, size, base in fields:
             raw = data[p : p + size]
             p += size
             if _fit_field_valid(raw, base, byteorder):
                 valid_fields[global_num][num] += 1
+                if wanted is not None:
+                    wanted[num] = int.from_bytes(raw, byteorder)
                 if num == 253 and size == 4:
                     ts = int.from_bytes(raw, byteorder)
                 elif samples is not None and global_num == FIT_MSG_RECORD and num in STREAM_FIELDS:
@@ -214,6 +226,11 @@ def _read_fit_records(
                 ts += 0x20
         if ts is not None:
             last_ts = ts
+        if wanted is not None:
+            if ts is not None:
+                wanted[253] = ts
+            collect[global_num].append(wanted)
+        if ts is not None:
             if global_num == FIT_MSG_RECORD:
                 record_times.append(ts)
                 if samples is not None:
