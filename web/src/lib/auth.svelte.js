@@ -6,6 +6,27 @@ let hasPasskey = $state(false);
 let sessionKind = $state(null);
 let problem = $state(null);
 
+// Whether this phone was signed in last time, so the app can open with no signal and log food offline. Only a
+// yes or no is kept; the session itself stays in its HttpOnly cookie, and the server still checks it every time.
+const REMEMBER = 'creed-signed-in';
+
+function remembered() {
+  try {
+    return localStorage.getItem(REMEMBER) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function remember(signedIn) {
+  try {
+    if (signedIn) localStorage.setItem(REMEMBER, '1');
+    else localStorage.removeItem(REMEMBER);
+  } catch {
+    // Private browsing: the app just won't open offline.
+  }
+}
+
 export async function checkAuth() {
   try {
     const result = await get('/api/auth/status');
@@ -13,9 +34,11 @@ export async function checkAuth() {
     sessionKind = result.session_kind;
     problem = null;
     status = result.signed_in ? 'signed-in' : 'signed-out';
+    remember(result.signed_in);
   } catch (failure) {
     problem = failure.message;
-    status = 'unreachable';
+    // No signal at all: open as before if this phone was signed in. Anything else is a real problem to show.
+    status = failure.status === 0 && remembered() ? 'signed-in' : 'unreachable';
   }
 }
 

@@ -373,7 +373,9 @@ class TestCronSync:
             monkeypatch.setenv("GARMIN_PERSONAL_API_KEY", GOOD_KEY)
             monkeypatch.setattr(Client.__init__, "__kwdefaults__", {**Client.__init__.__kwdefaults__, "delay": 0})
             body = client.post("/api/cron/sync", headers={"Authorization": f"Bearer {CRON}"}).json()
-        assert set(body) == {"status", "requests", "records", "backfill_pending", "message"}
+        assert set(body) == {"status", "requests", "records", "backfill_pending", "message", "reminders"}
+        # Reminders report a status and counts only: nobody's times, phones or food.
+        assert set(body["reminders"]) <= {"status", "sent", "skipped", "failed"}
 
     def test_reports_a_bad_key_without_exposing_it(self, client, monkeypatch):
         with MockGarmin(TODAY) as server:

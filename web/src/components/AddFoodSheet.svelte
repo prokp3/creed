@@ -20,21 +20,24 @@
     unitChoices,
   } from '../lib/food.js';
   import { food as store, logEntries, toggleFavourite } from '../lib/food.svelte.js';
+  import { warmUp } from '../lib/scanner.js';
+  import { onMount, untrack } from 'svelte';
 
   const SHOW_AT_MOST = 80;
 
-  let { date, onclose } = $props();
+  // `startWith`: a food to go straight to, such as one just scanned or made.
+  let { date, onclose, onscan, onnewfood, startWith = null } = $props();
 
   function startTime() {
     const now = new Date();
     return date === localDate(now) ? now : at(date, now.getHours(), now.getMinutes());
   }
 
-  let step = $state('search');
+  let step = $state(untrack(() => (startWith ? 'food' : 'search')));
   let query = $state('');
-  let chosenId = $state(null);
-  let quantity = $state(1);
-  let unit = $state('g');
+  let chosenId = $state(untrack(() => startWith?.id ?? null));
+  let quantity = $state(untrack(() => (startWith ? startingQuantity(startWith.default_unit, startWith.base) : 1)));
+  let unit = $state(untrack(() => startWith?.default_unit ?? 'g'));
   let when = $state(startTime());
   let oneOffName = $state('');
   let oneOffValues = $state({});
@@ -42,10 +45,14 @@
   const library = $derived(store.library);
   const nutrients = $derived(library?.nutrients ?? []);
   const foods = $derived(library?.foods ?? []);
-  const chosen = $derived(foods.find((f) => f.id === chosenId) ?? null);
+  // A food made a moment ago may still be on its way to the server, so it can come from `startWith` too.
+  const chosen = $derived(foods.find((f) => f.id === chosenId) ?? (startWith?.id === chosenId ? startWith : null));
   const picks = $derived(searchFoods(foods, query, library?.recent_food_ids ?? []));
   const everything = $derived(query.trim() ? [] : [...foods].sort((a, b) => a.name.localeCompare(b.name)));
   const quantityValid = $derived(Number.isFinite(quantity) && quantity > 0 && quantity <= 100000);
+
+  // The barcode reader takes a moment to load, so start before it's needed.
+  onMount(warmUp);
 
   function choose(item) {
     chosenId = item.id;
@@ -95,7 +102,10 @@
       <h2 class="sheet-title">Add food</h2>
     </div>
     <input class="field search" type="search" placeholder="Search your foods" aria-label="Search your foods" bind:value={query} autocomplete="off" />
-    <button type="button" class="secondary-button pressable" onclick={() => (step = 'one-off')}>Quick add something once</button>
+    <div class="actions">
+      <button type="button" class="secondary-button pressable" onclick={onscan}>Scan a barcode</button>
+      <button type="button" class="secondary-button pressable" onclick={() => (step = 'one-off')}>Quick add once</button>
+    </div>
 
     {#if !library}
       <p class="note" role="status">{store.libraryError ? store.libraryError.message : 'Loading your foods…'}</p>
@@ -116,7 +126,8 @@
           </div>
         </section>
       {:else if query.trim()}
-        <p class="note">No food called “{query.trim()}” yet. Use Quick add, or add it to your library (coming in the next update).</p>
+        <p class="note">No food called “{query.trim()}” yet.</p>
+        <button type="button" class="secondary-button pressable" onclick={() => onnewfood(query.trim())}>Add “{query.trim()}” to your foods</button>
       {/if}
       {#if everything.length}
         <section class="stack">
@@ -239,6 +250,12 @@
   .icon-button[aria-pressed] {
     margin-left: 0;
     margin-right: -10px;
+  }
+
+  .actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
   }
 
   .search {

@@ -404,7 +404,7 @@ class TestQuality:
 class TestSchema:
     def test_migrating_twice_changes_nothing(self, conn):
         assert migrate(conn) == ["0001_init.sql", "0002_activity_derived.sql", "0003_auth.sql", "0004_users.sql",
-                                 "0005_food.sql", "0006_food_seed.sql"]
+                                 "0005_food.sql", "0006_food_seed.sql", "0007_food_settings_push.sql"]
         assert migrate(conn) == []
 
     def test_every_table_has_row_level_security(self, store):

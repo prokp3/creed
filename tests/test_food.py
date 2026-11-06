@@ -207,7 +207,8 @@ class TestSchema:
         rows = conn.execute(
             "select relname, relrowsecurity from pg_class where relname like 'food%%' and relkind = 'r'"
         ).fetchall()
-        assert len(rows) == 9  # The 8 food tables and the seed template.
+        # The 8 food tables, the seed template, settings and the reminder record.
+        assert len(rows) == 11
         assert all(r["relrowsecurity"] for r in rows)
 
     def test_the_library_starts_with_staples(self, conn, user):

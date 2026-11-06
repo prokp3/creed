@@ -56,7 +56,8 @@ def test_other_sites_cannot_frame_the_app_or_inject_scripts():
     assert "frame-ancestors 'none'" in policy
     assert "script-src 'self'" in policy
     script_rule = next(part for part in policy.split(";") if "script-src" in part)
-    assert "unsafe" not in script_rule
+    # Only the app's own scripts. WebAssembly (the barcode reader) may compile, but no inline scripts or eval.
+    assert script_rule.split() == ["script-src", "'self'", "'wasm-unsafe-eval'"]
     assert headers["X-Frame-Options"] == "DENY"
     assert headers["Referrer-Policy"] == "no-referrer"
 
@@ -118,3 +119,9 @@ class TestScheduledSync:
 
 def test_python_version_matches_what_was_tested():
     assert (ROOT / ".python-version").read_text(encoding="utf-8").strip() == "3.12"
+
+
+def test_only_the_camera_is_allowed_and_only_for_the_app_itself():
+    policy = security_headers()["Permissions-Policy"]
+    assert "camera=(self)" in policy
+    assert "microphone=()" in policy and "geolocation=()" in policy

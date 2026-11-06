@@ -3,13 +3,17 @@ import {
   addDays,
   amountText,
   applyChanges,
+  applyLibraryChanges,
   baseAmount,
   clockText,
   contributions,
   convertQuantity,
+  convertValues,
   copies,
   entryFromFood,
   entryNutrients,
+  foodFromForm,
+  formFromFood,
   localDate,
   mealSummary,
   meals,
@@ -27,6 +31,7 @@ import {
   withOffset,
   withQuantity,
 } from './food.js';
+import { checkDigitOk } from './scanner.js';
 
 const EGG = {
   id: 'egg',
@@ -281,5 +286,94 @@ describe('search', () => {
     expect(searchFoods(foods, 'amul').map((f) => f.id)).toEqual(['milk']);
     expect(searchFoods(foods, 'EGG WHI').map((f) => f.id)).toEqual(['white']);
     expect(searchFoods(foods, 'pizza')).toEqual([]);
+  });
+});
+
+describe('library changes on their way', () => {
+  const library = {
+    foods: [EGG, OATS],
+    presets: [
+      { id: 'p1', name: 'Breakfast', sort_order: 0, items: [{ food_id: 'oats', quantity: 80, unit: 'g' }] },
+      { id: 'p2', name: 'Dinner', sort_order: 1, items: [{ food_id: 'egg', quantity: 3, unit: 'piece' }] },
+    ],
+    targets: [{ day_type: 'rest', effective_from: '2026-11-01', targets: { kcal: 2400 } }],
+    nutrients: NUTRIENTS.map((n, i) => ({ ...n, sort_order: i })),
+    settings: { training_minutes: 20, reminders_on: false },
+  };
+
+  it('shows new and changed foods, favourites first', () => {
+    const view = applyLibraryChanges(library, [
+      { kind: 'food-save', record: MILK },
+      { kind: 'food-save', record: { ...OATS, name: 'Rolled oats' } },
+    ]);
+    expect(view.foods.map((f) => f.name)).toEqual(['Milk, toned', 'Egg, whole', 'Rolled oats']);
+    expect(library.foods).toHaveLength(2);
+  });
+
+  it('marks a deleted food in the presets that use it', () => {
+    const view = applyLibraryChanges(library, [{ kind: 'food-delete', id: 'egg' }]);
+    expect(view.foods.map((f) => f.id)).toEqual(['oats']);
+    expect(view.presets[1].items[0].food_deleted).toBe(true);
+  });
+
+  it('reorders, replaces targets and merges settings, and doing it twice changes nothing', () => {
+    const changes = [
+      { kind: 'presets-order', ids: ['p2', 'p1'] },
+      { kind: 'targets-save', set: { day_type: 'rest', effective_from: '2026-11-01', targets: { kcal: 2500 } } },
+      { kind: 'settings-save', record: { training_minutes: 45 } },
+      { kind: 'nutrient-save', record: { id: 'fibre', name: 'Fibre', unit: 'g', sort_order: 99 } },
+    ];
+    const once = applyLibraryChanges(library, changes);
+    expect(once.presets.map((p) => p.id)).toEqual(['p2', 'p1']);
+    expect(once.targets).toEqual([{ day_type: 'rest', effective_from: '2026-11-01', targets: { kcal: 2500 } }]);
+    expect(once.settings).toEqual({ training_minutes: 45, reminders_on: false });
+    expect(once.nutrients.at(-1).id).toBe('fibre');
+    expect(applyLibraryChanges(once, changes)).toEqual(once);
+  });
+});
+
+describe('making a food', () => {
+  const blank = (overrides = {}) => ({ ...formFromFood(null), ...overrides });
+
+  it('turns values per scoop into values per 100 g', () => {
+    const { record } = foodFromForm(
+      blank({ name: 'Whey', units: [{ name: 'scoop', amount: 32 }], valuesPer: 'scoop', defaultUnit: 'scoop', values: { kcal: 120, protein: 24 } }),
+      NUTRIENTS,
+    );
+    expect(record.nutrients.protein).toBeCloseTo(75);
+    expect(record.nutrients.kcal).toBeCloseTo(375);
+    expect(record.units).toEqual({ scoop: 32 });
+    expect(record.default_unit).toBe('scoop');
+    expect('sodium' in record.nutrients).toBe(false);
+  });
+
+  it('says what is wrong in plain words', () => {
+    expect(foodFromForm(blank({ name: ' ' }), NUTRIENTS).problem).toMatch(/name/);
+    expect(foodFromForm(blank({ name: 'X', barcode: '12ab' }), NUTRIENTS).problem).toMatch(/barcode/);
+    expect(foodFromForm(blank({ name: 'X', units: [{ name: 'g', amount: 1 }] }), NUTRIENTS).problem).toMatch(/built in/);
+    expect(foodFromForm(blank({ name: 'X', values: { kcal: 1500 } }), NUTRIENTS).problem).toMatch(/more than 100 g can hold/);
+    expect(foodFromForm(blank({ name: 'X', values: { kcal: NaN } }), NUTRIENTS).problem).toMatch(/number/);
+  });
+
+  it('starts an edit from the food, values per 100', () => {
+    const form = formFromFood(EGG);
+    expect(form.id).toBe('egg');
+    expect(form.units).toEqual([{ name: 'piece', amount: 50 }]);
+    expect(form.valuesPer).toBe('g');
+    expect(form.values.protein).toBe(12.6);
+    expect(formFromFood(null).id).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it('converts shown values between per 100 and per unit', () => {
+    expect(convertValues({ kcal: 143, protein: null }, 100, 50)).toEqual({ kcal: 71.5, protein: null });
+  });
+});
+
+describe('barcodes', () => {
+  it('checks the last digit of food barcodes', () => {
+    expect(checkDigitOk('3017620422003')).toBe(true);
+    expect(checkDigitOk('3017620422004')).toBe(false);
+    expect(checkDigitOk('96385074')).toBe(true);
+    expect(checkDigitOk('123456')).toBe(true); // No check digit to test.
   });
 });

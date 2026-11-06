@@ -393,3 +393,134 @@ export function presetFromMeal(meal, name, foodsById) {
     .map((e) => ({ food_id: e.food_id, quantity: e.quantity, unit: e.unit }));
   return { id: newId(), name, items, left_out: meal.entries.length - items.length };
 }
+
+// ---------------------------------------------------------------- library changes not yet confirmed
+
+const byName = (a, b) => Number(b.favourite) - Number(a.favourite) || a.name.localeCompare(b.name);
+const byOrder = (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.name.localeCompare(b.name);
+
+function upsert(list, record) {
+  const others = list.filter((item) => item.id !== record.id);
+  return [...others, record];
+}
+
+/** Library changes still on their way, laid over the library the server last sent. Doing it twice changes nothing. */
+export function applyLibraryChanges(library, changes) {
+  if (!library) return library;
+  let { foods, presets, targets, nutrients, settings } = library;
+  for (const change of changes) {
+    if (change.kind === 'food-save') foods = upsert(foods, change.record);
+    else if (change.kind === 'food-delete') {
+      foods = foods.filter((f) => f.id !== change.id);
+      presets = presets.map((p) => ({
+        ...p,
+        items: p.items.map((i) => (i.food_id === change.id ? { ...i, food_deleted: true } : i)),
+      }));
+    } else if (change.kind === 'preset-save') presets = upsert(presets, change.preset);
+    else if (change.kind === 'preset-delete') presets = presets.filter((p) => p.id !== change.id);
+    else if (change.kind === 'presets-order') {
+      const order = new Map(change.ids.map((id, i) => [id, i]));
+      presets = presets.map((p) => (order.has(p.id) ? { ...p, sort_order: order.get(p.id) } : p));
+    } else if (change.kind === 'targets-save') {
+      const set = change.set;
+      targets = [...targets.filter((t) => !(t.day_type === set.day_type && t.effective_from === set.effective_from)), set];
+    } else if (change.kind === 'nutrient-save') nutrients = upsert(nutrients, change.record);
+    else if (change.kind === 'nutrient-delete') nutrients = nutrients.filter((n) => n.id !== change.id);
+    else if (change.kind === 'settings-save') settings = { ...settings, ...change.record };
+  }
+  return {
+    ...library,
+    foods: [...foods].sort(byName),
+    presets: [...presets].sort(byOrder),
+    targets,
+    nutrients: [...nutrients].sort(byOrder),
+    settings,
+  };
+}
+
+// ---------------------------------------------------------------- foods you make
+
+/** The most of a nutrient 100 g can hold, by unit, as the server checks. */
+export function limitPer100(unit) {
+  return { kcal: 1000, g: 150, mg: 100000 }[unit] ?? 100000;
+}
+
+/**
+ * A food record from what was typed: values for `valuesPer` (100 of the base, or one of a unit) become values per
+ * 100 of the base. Returns { record } or { problem } with a message for the person.
+ */
+export function foodFromForm(form, nutrients) {
+  const name = form.name.trim();
+  if (!name) return { problem: 'Give the food a name.' };
+  if (name.length > 80) return { problem: 'Names can be up to 80 characters.' };
+  const barcode = form.barcode.trim();
+  if (barcode && !/^\d{6,14}$/.test(barcode)) return { problem: 'A barcode is 6 to 14 digits.' };
+  const units = {};
+  for (const unit of form.units) {
+    const unitName = unit.name.trim();
+    if (!unitName) continue;
+    if (unitName === 'g' || unitName === 'ml') return { problem: `${unitName} is built in, so it doesn't need adding.` };
+    if (unitName.length > 20) return { problem: 'Unit names can be up to 20 characters.' };
+    if (!(unit.amount > 0)) return { problem: `Say how many ${form.base} one ${unitName} is.` };
+    units[unitName] = unit.amount;
+  }
+  const per = form.valuesPer === form.base ? 100 : units[form.valuesPer];
+  if (!per) return { problem: 'Choose what the values are for.' };
+  const values = {};
+  for (const n of nutrients) {
+    const typed = form.values[n.id];
+    if (typed === null || typed === undefined || typed === '') continue;
+    if (!Number.isFinite(typed) || typed < 0) return { problem: `${n.name} must be a number.` };
+    const per100 = (typed * 100) / per;
+    if (per100 > limitPer100(n.unit)) {
+      return { problem: `${n.name} is more than 100 ${form.base} can hold (${limitPer100(n.unit).toLocaleString('en-IN')} ${n.unit}). Check the amount.` };
+    }
+    values[n.id] = per100;
+  }
+  const defaultUnit = form.defaultUnit in units || form.defaultUnit === form.base ? form.defaultUnit : form.base;
+  return {
+    record: {
+      id: form.id,
+      name,
+      brand: form.brand.trim() || null,
+      barcode: barcode || null,
+      base: form.base,
+      nutrients: values,
+      units,
+      default_unit: defaultUnit,
+      favourite: Boolean(form.favourite),
+      source: form.source ?? 'manual',
+      notes: form.notes.trim() || null,
+    },
+  };
+}
+
+/** The editing form for a food: blank, an existing one, a copy, or a scanned draft. Values start per 100. */
+export function formFromFood(food, base = 'g') {
+  const source = food ?? {};
+  const values = {};
+  for (const [key, value] of Object.entries(source.nutrients ?? {})) values[key] = Math.round(value * 100) / 100;
+  return {
+    id: source.id ?? newId(),
+    name: source.name ?? '',
+    brand: source.brand ?? '',
+    barcode: source.barcode ?? '',
+    base: source.base ?? base,
+    units: Object.entries(source.units ?? {}).map(([name, amount]) => ({ name, amount })),
+    defaultUnit: source.default_unit ?? source.base ?? base,
+    valuesPer: source.base ?? base,
+    values,
+    favourite: Boolean(source.favourite),
+    source: source.source ?? 'manual',
+    notes: source.notes ?? '',
+  };
+}
+
+/** Shown values when switching what they're for: per 100 g to per 30 g scoop, and back. */
+export function convertValues(values, fromAmount, toAmount) {
+  const out = {};
+  for (const [key, value] of Object.entries(values)) {
+    out[key] = Number.isFinite(value) ? Math.round(((value * toAmount) / fromAmount) * 100) / 100 : value;
+  }
+  return out;
+}

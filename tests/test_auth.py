@@ -664,7 +664,7 @@ class TestUpgrade:
         conn.execute("insert into auth_recovery_code (code_hash) values ('\x04')")
         conn.commit()
 
-        assert migrate(conn) == ["0004_users.sql", "0005_food.sql", "0006_food_seed.sql"]
+        assert migrate(conn) == ["0004_users.sql", "0005_food.sql", "0006_food_seed.sql", "0007_food_settings_push.sql"]
         owner = conn.execute("select id, passkey_handle from app_user where is_owner").fetchone()
         assert owner["passkey_handle"] == "the-old-handle"
         for table in ("auth_credential", "auth_session", "auth_recovery_code"):

@@ -662,3 +662,115 @@ def day_types(conn: psycopg.Connection, user_id: str, start: date, end: date,
         days[day] = targets.day_type(overrides.get(day), durations.get(day, []), threshold_minutes)
         day += timedelta(days=1)
     return days
+
+
+# ---------------------------------------------------------------- settings
+
+DEFAULT_SETTINGS: dict[str, Any] = {
+    "training_minutes": targets.DEFAULT_TRAINING_MINUTES,
+    "reminders_on": False,
+    "reminder_times": [],
+    "reminder_gap_minutes": 180,
+    "timezone": "Asia/Kolkata",
+}
+
+
+@_for_user
+def get_settings(conn: psycopg.Connection, user_id: str) -> dict[str, Any]:
+    """This person's food settings, with the defaults for anything never changed."""
+    row = conn.execute(
+        "select training_minutes, reminders_on, reminder_times, reminder_gap_minutes, timezone, changed_at "
+        "from food_setting where user_id = %s", (user_id,)).fetchone()
+    return {**DEFAULT_SETTINGS, "changed_at": None, **(dict(row) if row else {})}
+
+
+@_for_user
+def save_settings(conn: psycopg.Connection, user_id: str, record: Mapping[str, Any], changed_at: datetime) -> str:
+    """Change any of the settings. Ones not mentioned keep their value."""
+    from creed.food import reminders
+
+    if not isinstance(record, Mapping):
+        raise InvalidFood("Settings must be a list of values.")
+    merged = {k: v for k, v in get_settings(conn, user_id).items() if k in DEFAULT_SETTINGS}
+    merged.update({k: record[k] for k in DEFAULT_SETTINGS if k in record})
+    minutes = merged["training_minutes"]
+    if isinstance(minutes, bool) or not isinstance(minutes, int) or not 1 <= minutes <= 600:
+        raise InvalidFood("A training day needs a workout of 1 to 600 minutes.")
+    gap = merged["reminder_gap_minutes"]
+    if isinstance(gap, bool) or not isinstance(gap, int) or not 30 <= gap <= 1440:
+        raise InvalidFood("The quiet time after logging must be 30 minutes to 24 hours.")
+    _flag(merged["reminders_on"], "Reminders")
+    merged["reminder_times"] = reminders.clean_times(merged["reminder_times"])
+    reminders.zone(merged["timezone"])
+    saved = _upsert(conn, "food_setting", [{"user_id": user_id, **merged, "changed_at": moment(changed_at)}],
+                    ("user_id",), update=(*DEFAULT_SETTINGS, "changed_at"), soft_delete=False)
+    return APPLIED if saved else STALE
+
+
+# ---------------------------------------------------------------- CSV import
+
+NEW = "new"
+DUPLICATE = "duplicate"  # Already saved, the same: skipped.
+CONFLICT = "conflict"  # Already saved, but different: only replaced when asked.
+DELETED_HERE = "deleted"  # Deleted here: deletes win, so skipped.
+
+
+@_for_user
+def classify_import(conn: psycopg.Connection, user_id: str,
+                    records: list[Mapping[str, Any]]) -> list[tuple[str, dict[str, Any]]]:
+    """Each record checked and compared with what's saved. Links to foods or presets this person doesn't have are
+    dropped (the entry keeps its own copy of the food), so a file from elsewhere still imports."""
+    from creed.food import csvio
+
+    cleaned = [clean_entry(r) for r in records]
+    ids = [c["id"] for c in cleaned]
+    existing = {str(r["id"]): r for r in conn.execute(
+        sql.SQL("select {}, deleted_at from food_log_entry where user_id = %s and id = any(%s::uuid[])").format(
+            sql.SQL(", ").join(map(sql.Identifier, ENTRY_COLUMNS))), (user_id, ids)).fetchall()}
+    foods = {str(r["id"]) for r in conn.execute(
+        "select id from food where user_id = %s and id = any(%s::uuid[])",
+        (user_id, [c["food_id"] for c in cleaned if c["food_id"]])).fetchall()}
+    presets = {str(r["id"]) for r in conn.execute(
+        "select id from food_preset where user_id = %s and id = any(%s::uuid[])",
+        (user_id, [c["preset_id"] for c in cleaned if c["preset_id"]])).fetchall()}
+    result = []
+    for c in cleaned:
+        if c["food_id"] and c["food_id"] not in foods:
+            c["food_id"] = None
+        if c["preset_id"] and c["preset_id"] not in presets:
+            c["preset_id"] = None
+            if c["kind"] == "preset":
+                c["kind"] = "import"
+        saved = existing.get(c["id"])
+        if saved is None:
+            status = NEW
+        elif saved["deleted_at"] is not None:
+            status = DELETED_HERE
+        else:
+            status = DUPLICATE if csvio.same_entry(c, saved) else CONFLICT
+        result.append((status, c))
+    return result
+
+
+@_for_user
+def apply_import(conn: psycopg.Connection, user_id: str, records: list[Mapping[str, Any]], replace: bool,
+                 changed_at: datetime) -> dict[str, int]:
+    """Save new rows, and differing ones only if `replace`. Never touches a deleted entry. Returns counts."""
+    classified = classify_import(conn, user_id, records)
+    counts = {NEW: 0, DUPLICATE: 0, CONFLICT: 0, DELETED_HERE: 0, "replaced": 0}
+    to_save = []
+    for status, c in classified:
+        counts[status] += 1
+        if status == NEW or (status == CONFLICT and replace):
+            to_save.append(c)
+            if status == CONFLICT:
+                counts["replaced"] += 1
+    at = moment(changed_at)
+    for start in range(0, len(to_save), 500):
+        rows = [{"user_id": user_id, **{col: r[col] for col in ENTRY_COLUMNS if col != "changed_at"}, "changed_at": at}
+                for r in to_save[start:start + 500]]
+        for row in rows:
+            row["nutrients_per_100"] = Jsonb(row["nutrients_per_100"])
+            row["unit_amounts"] = Jsonb(row["unit_amounts"])
+        _upsert(conn, "food_log_entry", rows, ("user_id", "id"), update=[c for c in ENTRY_COLUMNS if c != "id"])
+    return counts

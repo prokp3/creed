@@ -2,14 +2,14 @@
 
 A personal triathlon dashboard built from your own Garmin data. It installs on your iPhone's home screen and works like an app, with Face ID sign-in. It was built for training towards IRONMAN 70.3 Goa, and the race date is a setting you can change.
 
-**Status: early development, in daily use.** It runs on Vercel and is used on a real iPhone. Notifications, themes and more of the food logger are still to come; see [Roadmap](#roadmap).
+**Status: early development, in daily use.** It runs on Vercel and is used on a real iPhone. Notifications for recovery and sync, and themes, are still to come; see [Roadmap](#roadmap).
 
 ## What it does
 
 - **Today:** a race-bib countdown to the second, rings for recovery, strain and sleep (each hidden until there's enough data), resting heart rate, sleep against what you need, today's and this week's run, bike and swim, Garmin's own numbers, and your fitness trend.
 - **In-Depth:** fitness, fatigue and form, recovery and its inputs, sleep, weekly load, Garmin data, aerobic efficiency and data quality, over 7, 30, 90 or 180 days. Every computed number has a "Why this number" panel with its formula, inputs, window, confidence and source.
 - **Activities:** every activity with its load, filtered by run, bike or swim. Runs and rides have a **route map** drawn from your watch's GPS, with gaps left where the watch lost signal.
-- **Food:** log meals in a tap or two. Save a meal as a preset and log it again with one tap, with an undo. Search a starter library of 30 staple foods (typical values) and log them in pieces, katoris, glasses or grams, or quick add something eaten once. Calories and protein rings fill against your training day or rest day targets, and Creed decides the day type from your Garmin workouts unless you choose. Your other nutrients are listed too, along with what you've eaten against Garmin's calorie burn, which is an estimate. A food that doesn't list a nutrient counts as unknown, not zero, and the total says so.
+- **Food:** log meals in a tap or two. Presets log a whole meal with one tap, with an undo. Your library starts with 30 staple foods (typical values) and you add your own, with values typed per 100 g or per serving and units such as pieces, katoris or scoops. **Scan a barcode** with the camera, read on the phone, and Creed looks it up in [Open Food Facts](https://world.openfoodfacts.org) for you to check and save. Calories and protein rings fill against training day or rest day targets, and Creed decides the day type from your Garmin workouts (a workout length you choose) unless you pick one. Add your own nutrients, see 7 and 30 day **trends**, get **reminders** to log when you haven't for a while, and **export or import** your log as CSV. Logging works **with no signal** and catches up when you're back online. A food that doesn't list a nutrient counts as unknown, not zero, and totals say so.
 - **Syncing:** every 30 minutes on a schedule, once a day as a backup, and whenever you tap the sync time on Today.
 - **Feels like an app:** Face ID sign-in with passkeys, screen animations, and haptic taps on iPhone through an unofficial workaround that may not work on every iOS version.
 - **Honest numbers:** values from Garmin are shown unchanged and tagged Garmin. Creed's own values are tagged Computed, and Creed shows "not enough data" rather than guess. Missing days are never filled in.
@@ -119,6 +119,16 @@ Don't upload the zip anywhere. Put it, unopened, in a folder called `exports` in
 
 It reads the newest zip in `exports/` and brings in daily summaries, sleep and overnight HRV. Where the API already has a day, the API's version is kept, and running it again changes nothing. It ends with a report of how many days it found and how many were new. Activities come from the API, so it only counts any that are missing.
 
+### 8. Optionally, turn on food reminders
+
+Reminders are Web Push notifications signed by a key pair that only your deployment has. Make the pair once:
+
+```bash
+.venv/Scripts/python tools/make_vapid_keys.py
+```
+
+It adds `PUSH_VAPID_PRIVATE_KEY` and `PUSH_VAPID_PUBLIC_KEY` to `.env` without printing them. Copy both into Vercel's **Environment Variables**, then redeploy. Don't make a new pair later: phones that turned reminders on would stop getting them until they turn them on again. Then, in the app opened from your home screen, go to **Food**, **Food settings**, and turn on **Remind me to log**. Reminders go out when the scheduled sync runs, so within about half an hour of the time you pick.
+
 That's it. From now on, Creed syncs on its own. Change the race date, time zone and heart-rate settings in **Settings**, behind the gear on Today.
 
 ## How syncing works
@@ -152,6 +162,8 @@ Creed signs you in with a passkey, which on an iPhone means Face ID. A passkey i
 - **One deployment, one person's Garmin data.** Your copy holds only your Garmin data, in your own database. Only the account that set up the deployment sees it.
 - **Food is kept per person.** Every food table records whose row it is. For food, the server switches to a restricted database role, and row-level security policies let it see only the signed-in person's rows. Each query also filters by person, as a second guard.
 - **Server side only.** Row-level security is on for every table, and Supabase's public roles have no access. Secrets and keys never reach the browser.
+- **Food on your phone.** So logging works with no signal, your food library, recent days and changes not yet sent are kept in the app's own storage on your phone. Signing out deletes them.
+- **Barcodes and notifications.** Barcodes are read on your phone, and only the number goes to your Creed, which asks Open Food Facts; they never see who's asking. Notifications are encrypted for your phone, so Apple's push service can't read them, and they never name what you ate.
 - **Nothing is filled in.** A day with no data has no row. Values that fail validation are kept but flagged, and metrics leave them out.
 - **Dates:** sleep and HRV belong to the day you woke up, as on Garmin. Times are stored in UTC along with your local offset.
 - **Sources:** each value records whether it came from Garmin's API, the account export or a manual entry, so those can be added without changing the database.
@@ -201,10 +213,9 @@ The server uses whichever database `DATABASE_URL` points at, so a passkey you ma
 
 ## Roadmap
 
-- **Notifications:** "Recovery is ready", "Garmin key expiring soon" and "Sync failed". The settings for them are already there.
+- **More notifications:** "Recovery is ready", "Garmin key expiring soon" and "Sync failed". Their settings, and the push setup food reminders use, are already there.
 - **A full Data Quality page.**
 - **Themes.**
-- **More food logging:** adding and editing your own foods, a barcode scanner, trends, reminders, CSV import and export, and logging with no signal.
 - **A hosted version for everyone.** Later, I plan to host Creed on my own server so that anyone can create an account with an ID and password, connect their own Garmin, and use it without setting anything up. Connecting other people's Garmin accounts needs Garmin's approval through its Connect Developer Program, because the Personal API this version uses is only for your own data. Creed will never ask for your Garmin password. Until then, follow [Run your own Creed](#run-your-own-creed).
 
 ## Never commit

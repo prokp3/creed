@@ -8,23 +8,29 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from typing import Annotated, Any
 
 import psycopg
 from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import Response
 
-from creed import config
+from creed import config, notify, push
 from creed import settings as app_settings
 from creed.api.deps import Conn, Session
 from creed.db import food, reads
+from creed.db import push as db_push
+from creed.food import barcode, csvio, reminders, targets
 from creed.food import day as food_day
-from creed.food import targets
+from creed.food import trends as food_trends
 from creed.food.nutrition import InvalidFood
 
 router = APIRouter(prefix="/api/food")
+push_router = APIRouter(prefix="/api/push")
 
 MAX_CHANGES = 200
+MAX_CSV_CHARACTERS = 3_000_000
+TREND_DAYS = (7, 30)
 
 
 def _today(conn: psycopg.Connection) -> date:
@@ -52,12 +58,28 @@ def library(session: Session, conn: Conn) -> dict[str, Any]:
             "foods": food.list_foods(conn, user, limit=5000),
             "presets": food.list_presets(conn, user),
             "recent_food_ids": food.recent_food_ids(conn, user),
+            "settings": _settings_out(food.get_settings(conn, user)),
             # Every target set, so the app can show the ones in force and edit them.
             "targets": [
                 {"day_type": t.day_type, "effective_from": t.effective_from.isoformat(), "targets": t.targets}
                 for t in sorted(food.target_sets(conn, user), key=lambda t: (t.day_type, t.effective_from))
             ],
+            "account": user,
+            "push": _push_info(),
         }
+
+
+def _settings_out(saved: dict[str, Any]) -> dict[str, Any]:
+    return {k: v for k, v in saved.items() if k != "changed_at"}
+
+
+def _push_info() -> dict[str, Any]:
+    """The public half of the notification key, which the phone needs to subscribe. None when not set up."""
+    try:
+        keys = push.load_vapid_keys()
+    except push.PushNotConfigured:
+        keys = None
+    return {"public_key": keys.public_b64 if keys else None}
 
 
 @router.get("/day")
@@ -66,7 +88,7 @@ def day_screen(session: Session, conn: Conn, date_: Annotated[str | None, Query(
     user = session["user_id"]
     today = _today(conn)
     day = _day(date_, conn)
-    threshold = targets.DEFAULT_TRAINING_MINUTES
+    threshold = food.get_settings(conn, user)["training_minutes"]
     # Garmin data first: it can't be read while acting for a user.
     kind = food.day_types(conn, user, day, day, threshold)[day]
     burned = None
@@ -109,6 +131,7 @@ APPLY: dict[str, Callable[[psycopg.Connection, str, dict[str, Any]], Any]] = {
     "targets.save": lambda c, u, ch: food.save_targets(c, u, ch.get("day_type"), _date(ch.get("effective_from")),
                                                       ch.get("targets") or {}, _when(ch)),
     "day_type.set": lambda c, u, ch: food.set_day_type(c, u, _date(ch.get("date")), ch.get("day_type"), _when(ch)),
+    "settings.save": lambda c, u, ch: food.save_settings(c, u, ch.get("record") or {}, _when(ch)),
 }
 
 
@@ -141,3 +164,184 @@ async def changes(request: Request, session: Session, conn: Conn) -> dict[str, A
                 conn.execute("release savepoint food_change")
     conn.commit()
     return {"results": results}
+
+
+# ---------------------------------------------------------------- trends
+
+@router.get("/trends")
+def trends_screen(session: Session, conn: Conn, days: int = 7,
+                  end: Annotated[str | None, Query()] = None) -> dict[str, Any]:
+    """The last 7 or 30 days: each day's food against its targets and Garmin's burn, plus averages."""
+    if days not in TREND_DAYS:
+        raise HTTPException(status_code=422, detail="days must be 7 or 30.")
+    user = session["user_id"]
+    last = _day(end, conn)
+    first = last - timedelta(days=days - 1)
+    threshold = food.get_settings(conn, user)["training_minutes"]
+    kinds = food.day_types(conn, user, first, last, threshold)
+    burned: dict[date, float | None] = {}
+    if session["is_owner"]:
+        burned = reads.metric_series(conn, ["calories_total"], first, last)["calories_total"]
+    with food.as_user(conn, user):
+        return food_trends.trends(
+            start=first, end=last, entries=food.entries_between(conn, user, first, last),
+            nutrients=food.list_nutrients(conn, user), day_types=kinds, target_sets=food.target_sets(conn, user),
+            burned=burned,
+        )
+
+
+# ---------------------------------------------------------------- CSV
+
+@router.get("/export.csv")
+def export_csv(session: Session, conn: Conn) -> Response:
+    """Every entry ever logged, as a spreadsheet."""
+    user = session["user_id"]
+    with food.as_user(conn, user):
+        text = csvio.export(food.entries_between(conn, user, date(1970, 1, 1), date(2999, 12, 31)),
+                            food.list_nutrients(conn, user))
+    name = f"creed-food-{config.local_today(app_settings.load(conn).timezone).isoformat()}.csv"
+    return Response(text, media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+
+async def _csv_body(request: Request) -> tuple[str, str, dict[str, Any]]:
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=422, detail="Send a JSON object.") from None
+    text = body.get("csv") if isinstance(body, dict) else None
+    if not isinstance(text, str) or not text.strip():
+        raise HTTPException(status_code=422, detail="Choose a CSV file.")
+    if len(text) > MAX_CSV_CHARACTERS:
+        raise HTTPException(status_code=422, detail="That file is too big. Import up to about 3 MB at a time.")
+    zone_name = body.get("timezone") or "Asia/Kolkata"
+    try:
+        reminders.zone(zone_name)
+    except InvalidFood:
+        zone_name = "Asia/Kolkata"
+    return text, zone_name, body
+
+
+def _parse_csv(conn: psycopg.Connection, user: str, text: str, zone_name: str) -> dict[str, Any]:
+    with food.as_user(conn, user):
+        nutrients = food.list_nutrients(conn, user)
+    try:
+        return csvio.parse(text, nutrients, zone_name)
+    except InvalidFood as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+
+
+def _check_rows(parsed: dict[str, Any]) -> tuple[list[Any], list[dict[str, Any]]]:
+    """Rows the database would refuse join the file's own errors, so one bad row can't stop the rest."""
+    good, errors = [], list(parsed["errors"])
+    for number, record in parsed["records"]:
+        try:
+            food.clean_entry(record)
+        except InvalidFood as exc:
+            errors.append({"row": number, "error": str(exc)})
+        else:
+            good.append((number, record))
+    return good, sorted(errors, key=lambda e: e["row"])
+
+
+@router.post("/import/preview")
+async def import_preview(request: Request, session: Session, conn: Conn) -> dict[str, Any]:
+    """What importing this file would do, without saving anything."""
+    text, zone_name, _ = await _csv_body(request)
+    user = session["user_id"]
+    parsed = _parse_csv(conn, user, text, zone_name)
+    good, errors = _check_rows(parsed)
+    classified = food.classify_import(conn, user, [r for _, r in good]) if good else []
+    counts = {food.NEW: 0, food.DUPLICATE: 0, food.CONFLICT: 0, food.DELETED_HERE: 0}
+    samples: dict[str, list[dict[str, Any]]] = {k: [] for k in counts}
+    for (number, _), (status, record) in zip(good, classified, strict=True):
+        counts[status] += 1
+        if len(samples[status]) < 5:
+            samples[status].append({"row": number, "date": record["local_date"].isoformat(),
+                                    "food": record["food_name"], "meal": record["meal_label"]})
+    return {"counts": counts, "samples": samples, "errors": errors[:50], "error_count": len(errors),
+            "ignored_columns": parsed["ignored"]}
+
+
+@router.post("/import")
+async def import_csv(request: Request, session: Session, conn: Conn) -> dict[str, Any]:
+    """Save the file's new entries. Entries that differ from what's saved are replaced only if asked."""
+    text, zone_name, body = await _csv_body(request)
+    replace = body.get("replace_conflicts") is True
+    user = session["user_id"]
+    good, errors = _check_rows(_parse_csv(conn, user, text, zone_name))
+    counts = food.apply_import(conn, user, [r for _, r in good], replace, datetime.now(timezone.utc)) if good else {}
+    conn.commit()
+    return {"counts": counts, "error_count": len(errors)}
+
+
+# ---------------------------------------------------------------- barcodes
+
+@router.get("/barcode/{code}")
+def barcode_lookup(code: str, session: Session, conn: Conn) -> dict[str, Any]:
+    """Your own food with this barcode, else a draft from Open Food Facts, else nothing found."""
+    if not barcode.valid(code):
+        raise HTTPException(status_code=422, detail="A barcode is 6 to 14 digits.")
+    user = session["user_id"]
+    with food.as_user(conn, user):
+        mine = food.find_by_barcode(conn, user, code)
+    if mine:
+        return {"source": "library", "food": mine}
+    try:
+        product = barcode.fetch(code)
+    except barcode.LookupFailed as exc:
+        raise HTTPException(status_code=502, detail=f"{exc} Enter the food by hand; the barcode is kept.") from None
+    if product is None:
+        return {"source": "none", "barcode": code}
+    return {"source": "openfoodfacts", "draft": barcode.draft(code, product)}
+
+
+# ---------------------------------------------------------------- notifications
+
+async def _json(request: Request) -> dict[str, Any]:
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=422, detail="Send a JSON object.") from None
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=422, detail="Send a JSON object.")
+    return body
+
+
+@push_router.post("/subscribe")
+async def subscribe(request: Request, session: Session, conn: Conn) -> dict[str, Any]:
+    """This phone agreed to notifications. The address and keys are the browser's own subscription."""
+    body = await _json(request)
+    keys = body.get("keys") if isinstance(body.get("keys"), dict) else {}
+    try:
+        db_push.save_subscription(conn, session["user_id"], body.get("endpoint"), keys.get("p256dh"), keys.get("auth"))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    conn.commit()
+    return {"subscribed": True}
+
+
+@push_router.post("/unsubscribe")
+async def unsubscribe(request: Request, session: Session, conn: Conn) -> dict[str, Any]:
+    body = await _json(request)
+    if isinstance(body.get("endpoint"), str):
+        db_push.delete_subscription(conn, session["user_id"], body["endpoint"])
+        conn.commit()
+    return {"subscribed": False}
+
+
+@push_router.post("/test")
+def test_notification(session: Session, conn: Conn) -> dict[str, Any]:
+    """Send a notification to your own phones now, to check they arrive."""
+    try:
+        keys = push.load_vapid_keys()
+    except push.PushNotConfigured as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from None
+    if keys is None:
+        raise HTTPException(status_code=503, detail="Notifications aren't set up on the server yet.")
+    delivered = notify.deliver(conn, session["user_id"], {
+        "title": "Creed", "body": "Notifications work.", "url": "/#/food", "tag": "test"}, keys)
+    conn.commit()
+    if not delivered:
+        raise HTTPException(status_code=409, detail="No phone took the notification. Turn notifications on again.")
+    return {"delivered": delivered}

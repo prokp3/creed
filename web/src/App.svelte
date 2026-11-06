@@ -5,6 +5,7 @@
   import { auth, checkAuth } from './lib/auth.svelte.js';
   import { changeScreen, motionBetween } from './lib/motion.js';
   import { refreshRace } from './lib/race.svelte.js';
+  import { flush as sendWaitingFood, startFood } from './lib/food.svelte.js';
   import Today from './screens/Today.svelte';
   import InDepth from './screens/InDepth.svelte';
   import Activities from './screens/Activities.svelte';
@@ -51,6 +52,7 @@
     if (auth.status === 'signed-in') {
       freshness += 1;
       refreshRace();
+      sendWaitingFood();
     } else if (auth.status === 'unreachable') {
       checkAuth();
     }
@@ -59,7 +61,10 @@
   onMount(checkAuth);
 
   $effect(() => {
-    if (auth.status === 'signed-in') refreshRace();
+    if (auth.status === 'signed-in') {
+      refreshRace();
+      startFood();
+    }
   });
 </script>
 

@@ -1,6 +1,6 @@
 // Keeps the app's own files so it opens instantly and without a connection.
 // API responses are personal data and are never stored here.
-const CACHE = 'creed-shell-v1';
+const CACHE = 'creed-shell-v2';
 
 self.addEventListener('install', () => self.skipWaiting());
 
@@ -38,5 +38,42 @@ self.addEventListener('fetch', (event) => {
   // Built files have their content in their name, so a saved copy is never out of date.
   event.respondWith(
     caches.match(event.request).then((hit) => hit || fetch(event.request).then((r) => remember(event.request, r))),
+  );
+});
+
+// Notifications from Creed's server, such as a reminder to log food. The message arrives encrypted for this phone.
+self.addEventListener('push', (event) => {
+  let message = {};
+  try {
+    message = event.data ? event.data.json() : {};
+  } catch {
+    message = { body: event.data ? event.data.text() : '' };
+  }
+  event.waitUntil(
+    self.registration.showNotification(message.title || 'Creed', {
+      body: message.body || '',
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      tag: message.tag || 'creed',
+      data: { url: message.url || '/' },
+    }),
+  );
+});
+
+// Tapping a notification opens the app at the right screen, reusing it if it's already open.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = new URL(event.notification.data?.url || '/', self.location.origin);
+  if (target.origin !== self.location.origin) return;
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
+      for (const client of windows) {
+        if ('focus' in client) {
+          client.navigate?.(target.href);
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow(target.href);
+    }),
   );
 });

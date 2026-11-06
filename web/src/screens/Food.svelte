@@ -4,6 +4,13 @@
   import { untrack } from 'svelte';
   import AddFoodSheet from '../components/AddFoodSheet.svelte';
   import DayTypeSheet from '../components/DayTypeSheet.svelte';
+  import FoodEditorSheet from '../components/FoodEditorSheet.svelte';
+  import FoodSettingsSheet from '../components/FoodSettingsSheet.svelte';
+  import LibrarySheet from '../components/LibrarySheet.svelte';
+  import NutrientsSheet from '../components/NutrientsSheet.svelte';
+  import PresetEditorSheet from '../components/PresetEditorSheet.svelte';
+  import ScannerSheet from '../components/ScannerSheet.svelte';
+  import TrendsSheet from '../components/TrendsSheet.svelte';
   import FoodRing from '../components/FoodRing.svelte';
   import Icon from '../components/Icon.svelte';
   import MealSheet from '../components/MealSheet.svelte';
@@ -67,8 +74,32 @@
     return day === localDate(now) ? now : at(day, now.getHours(), now.getMinutes());
   }
 
+  // Where a scanned or newly made food goes next: straight to logging it, or back to your foods.
+  function afterFoodSaved(record) {
+    if (sheet?.then === 'log') sheet = { kind: 'add', startWith: record };
+    else if (sheet?.back === 'library') sheet = { kind: 'library' };
+    else close();
+  }
+
+  function scanned(found, then) {
+    if (found.food) {
+      sheet = then === 'library' ? { kind: 'food-edit', food: found.food, back: 'library' } : { kind: 'add', startWith: found.food };
+    } else {
+      sheet = { kind: 'food-edit', food: found.draft, note: found.note, then: then === 'library' ? null : 'log', back: then === 'library' ? 'library' : null };
+    }
+  }
+
+  const MORE = [
+    { kind: 'trends', label: 'Trends', note: '7 and 30 days' },
+    { kind: 'library', label: 'Your foods', note: 'Add, scan, edit' },
+    { kind: 'presets', label: 'Presets', note: 'Meals in one tap' },
+    { kind: 'nutrients', label: 'Nutrients', note: 'Rename or add your own' },
+    { kind: 'settings', label: 'Food settings', note: 'Training days, reminders, CSV' },
+  ];
+
   const dayTypeNote = $derived.by(() => {
     if (!view.loaded) return '';
+    if (view.dayType.how === 'unknown') return 'Offline: decided once back online';
     if (view.dayType.how === 'override') return 'Set by you';
     if (view.dayType.how === 'garmin') return 'Workout synced from Garmin';
     return view.isToday ? 'Until a workout syncs' : 'No workout synced';
@@ -89,6 +120,9 @@
 
   <div class="top gutter">
     <h1 class="page-heading">Food</h1>
+    {#if store.waiting && !store.online}
+      <span class="offline" role="status">Offline · {store.waiting} waiting</span>
+    {/if}
     <div class="day-nav">
       <button type="button" class="nav-button pressable" aria-label="Previous day" onclick={() => (date = addDays(date, -1))}><Icon name="back" size={20} stroke={2.2} /></button>
       <span class="day-name" aria-live="polite">{relativeDay(date, today)}</span>
@@ -165,6 +199,8 @@
         <h2 class="section-heading">Presets</h2>
         {#if presets.length}
           <button type="button" class="text-button" onclick={() => (sheet = { kind: 'presets' })}>Edit</button>
+        {:else}
+          <button type="button" class="text-button" onclick={() => (sheet = { kind: 'preset-edit', preset: null })}>New</button>
         {/if}
       </div>
       {#if presets.length}
@@ -174,7 +210,7 @@
           {/each}
         </div>
       {:else}
-        <p class="note gutter">No presets yet. Log a meal, tap it, then choose Save as a preset to log it again in one tap.</p>
+        <p class="note gutter">No presets yet. Tap New, or save one from a meal you've logged, to log it again in one tap.</p>
       {/if}
     </section>
 
@@ -199,11 +235,60 @@
         <p class="note">Nothing logged {view.isToday ? 'yet today' : 'on this day'}. Tap + to add food.</p>
       {/if}
     </section>
+
+    <section class="gutter stack more-section">
+      <h2 class="section-heading">More</h2>
+      <div class="list">
+        {#each MORE as row (row.kind)}
+          <button type="button" class="list-row more pressable" onclick={() => (sheet = { kind: row.kind })}>
+            <span class="more-text"><span class="more-name">{row.label}</span><span class="note">{row.note}</span></span>
+            <Icon name="forward" size={18} />
+          </button>
+        {/each}
+      </div>
+    </section>
   {/if}
 </Screen>
 
 {#if sheet?.kind === 'add'}
-  <AddFoodSheet {date} onclose={close} />
+  <AddFoodSheet
+    {date}
+    startWith={sheet.startWith ?? null}
+    onclose={close}
+    onscan={() => (sheet = { kind: 'scan', then: 'log' })}
+    onnewfood={(name) => (sheet = { kind: 'food-edit', food: { name }, then: 'log' })}
+  />
+{:else if sheet?.kind === 'scan'}
+  <ScannerSheet onclose={close} onfound={(found) => scanned(found, sheet.then)} />
+{:else if sheet?.kind === 'food-edit'}
+  {#key sheet}
+    <FoodEditorSheet
+      food={sheet.food ?? null}
+      copy={sheet.copy ?? false}
+      note={sheet.note ?? ''}
+      onclose={close}
+      onsaved={afterFoodSaved}
+      onback={sheet.back === 'library' ? () => (sheet = { kind: 'library' }) : null}
+    />
+  {/key}
+{:else if sheet?.kind === 'library'}
+  <LibrarySheet
+    onclose={close}
+    onnew={() => (sheet = { kind: 'food-edit', food: null, back: 'library' })}
+    onedit={(item) => (sheet = { kind: 'food-edit', food: item, back: 'library' })}
+    oncopy={(item) => (sheet = { kind: 'food-edit', food: item, copy: true, back: 'library' })}
+    onscan={() => (sheet = { kind: 'scan', then: 'library' })}
+  />
+{:else if sheet?.kind === 'nutrients'}
+  <NutrientsSheet onclose={close} />
+{:else if sheet?.kind === 'preset-edit'}
+  {#key sheet}
+    <PresetEditorSheet preset={sheet.preset ?? null} copy={sheet.copy ?? false} onclose={close} onback={() => (sheet = { kind: 'presets' })} />
+  {/key}
+{:else if sheet?.kind === 'trends'}
+  <TrendsSheet onclose={close} />
+{:else if sheet?.kind === 'settings'}
+  <FoodSettingsSheet onclose={close} ontargets={() => (sheet = { kind: 'targets' })} />
 {:else if openMeal}
   <MealSheet meal={openMeal} nutrients={library?.nutrients ?? []} onclose={close} />
 {:else if openNutrient}
@@ -213,7 +298,12 @@
 {:else if sheet?.kind === 'day-type' && view.loaded}
   <DayTypeSheet {date} dayType={view.dayType} onclose={close} />
 {:else if sheet?.kind === 'presets'}
-  <PresetsSheet onclose={close} />
+  <PresetsSheet
+    onclose={close}
+    onnew={() => (sheet = { kind: 'preset-edit', preset: null })}
+    onedit={(preset) => (sheet = { kind: 'preset-edit', preset })}
+    oncopy={(preset) => (sheet = { kind: 'preset-edit', preset, copy: true })}
+  />
 {/if}
 
 <style>
@@ -411,9 +501,40 @@
     white-space: nowrap;
   }
 
-  /* Room under the last meal so the add button never covers it. */
-  .meals-section {
+  /* Room at the bottom so the add button never covers the last row. */
+  .more-section {
     padding-bottom: 72px;
+  }
+
+  .more {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    text-align: left;
+    color: var(--ink-3);
+  }
+
+  .list .more + .more {
+    border-top: 1px solid var(--line);
+  }
+
+  .more-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 0;
+  }
+
+  .more-name {
+    font: 700 17px/1.1 var(--display);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ink);
+  }
+
+  .offline {
+    font-size: 12px;
+    color: var(--ink-3);
   }
 
   .meal {

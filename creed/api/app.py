@@ -11,12 +11,13 @@ import psycopg
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
 
-from creed import auth, config
+from creed import auth, config, notify
 from creed import settings as app_settings
 from creed.api import views
 from creed.api.auth_routes import router as auth_router
-from creed.api.food_routes import router as food_router
 from creed.api.deps import Conn, OwnerSession
+from creed.api.food_routes import push_router
+from creed.api.food_routes import router as food_router
 from creed.db import reads
 from creed.db.store import Store
 from creed.garmin import fit, track
@@ -81,6 +82,7 @@ def sign_in_not_configured(_request: Request, exc: auth.NotConfigured) -> JSONRe
 
 app.include_router(auth_router)
 app.include_router(food_router)
+app.include_router(push_router)
 
 
 def _secret_matches(given: str | None, expected: str | None) -> bool:
@@ -270,8 +272,15 @@ def _sync(conn: psycopg.Connection, trigger: str) -> dict[str, Any]:
 
 @app.api_route("/api/cron/sync", methods=["GET", "POST"], dependencies=[Depends(require_cron)])
 def cron_sync(conn: Conn) -> Response:
-    """Called on a schedule by GitHub Actions (POST) and once a day by Vercel (GET), with a secret only they hold."""
-    return JSONResponse(_sync(conn, "cron"))
+    """Called on a schedule by GitHub Actions (POST) and once a day by Vercel (GET), with a secret only they hold.
+    Food reminders go first, as they're quick, and a problem with them never stops the sync."""
+    try:
+        sent = notify.send_food_reminders(conn)
+    except Exception:  # noqa: BLE001
+        conn.rollback()
+        sent = {"status": "failed"}
+    result = _sync(conn, "cron")
+    return JSONResponse({**result, "reminders": sent})
 
 
 @app.post("/api/sync")

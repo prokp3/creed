@@ -2,6 +2,8 @@
   // The Sign-in part of Settings: the passkeys, the recovery code, and signing out.
   import { del, post } from '../lib/api.js';
   import { auth, checkAuth } from '../lib/auth.svelte.js';
+  import { clearFood } from '../lib/food.svelte.js';
+  import { stopNotifications } from '../lib/push.js';
   import { shortDate, zonedDate } from '../lib/format.js';
   import { createPasskey, deviceName, passkeyProblem, unlockName, usePasskey } from '../lib/passkey.js';
   import { resource } from '../lib/resource.svelte.js';
@@ -95,6 +97,9 @@
   const signOut = () =>
     attempt(async () => {
       await post('/api/auth/sign-out');
+      // Food kept on this phone for logging offline goes too, along with any notifications to it.
+      await stopNotifications();
+      await clearFood();
       location.hash = '#/today';
       await checkAuth();
     });
