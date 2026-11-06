@@ -7,7 +7,7 @@
 
   const COMPACT_AFTER = 130;
 
-  let { active = true, fill = false, children } = $props();
+  let { active = true, fill = false, children, overlay } = $props();
   let compact = $state(false);
 
   function onscroll(event) {
@@ -33,6 +33,8 @@
         </div>
       </div>
     {/if}
+    <!-- Things that float over the page and stay put while it scrolls, such as an add button. -->
+    {#if overlay}{@render overlay()}{/if}
   </div>
 </div>
 

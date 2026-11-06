@@ -30,3 +30,13 @@ def require_session(request: Request, conn: Conn) -> dict[str, Any]:
 
 
 Session = Annotated[dict[str, Any], Depends(require_session)]
+
+
+def require_owner(session: Session) -> dict[str, Any]:
+    """Garmin data, the dashboard built from it and the app's settings belong to the owner alone."""
+    if not session["is_owner"]:
+        raise HTTPException(status_code=403, detail="This account has no Garmin data here.")
+    return session
+
+
+OwnerSession = Annotated[dict[str, Any], Depends(require_owner)]

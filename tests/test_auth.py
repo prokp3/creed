@@ -553,3 +553,126 @@ class TestAddress:
         assert sign_in(new_address_client, passkey).status_code == 401
         # The recovery code isn't tied to the address, so it's the way back in.
         assert new_address_client.post("/api/auth/recover", json={"code": code}).status_code == 200
+
+
+def second_person(client, store):
+    """Someone besides the owner, given a recovery code and then a passkey of their own. Returns both."""
+    user_id = auth.create_user(store.conn)
+    code = auth.new_recovery_code(store.conn, user_id)
+    store.commit()
+    assert client.post("/api/auth/recover", json={"code": code}).status_code == 200
+    passkey, response = register(client, secret=None)
+    assert response.status_code == 200
+    return user_id, passkey
+
+
+class TestPeople:
+    def test_the_setup_secret_always_makes_passkeys_for_the_owner(self, client, store):
+        register(client)
+        register(client)
+        rows = store.conn.execute("select count(*) as people, bool_and(is_owner) as owners from app_user").fetchone()
+        assert rows == {"people": 1, "owners": True}
+
+    def test_the_owner_has_a_starter_food_library(self, client, store):
+        register(client)
+        owner = auth.owner_id(store.conn)
+        assert store.conn.execute("select count(*) as n from food where user_id = %s",
+                                  (owner,)).fetchone()["n"] == 30
+
+    def test_someone_else_signs_in_as_themselves(self, client, store):
+        set_up(client)
+        user_id, passkey = second_person(client, store)
+        client.post("/api/auth/sign-out")
+        assert sign_in(client, passkey).status_code == 200
+        session = auth.find_session(store.conn, client.cookies.get(auth.SESSION_COOKIE))
+        assert session["user_id"] == user_id
+        assert session["is_owner"] is False
+
+    @pytest.mark.parametrize("route", ["/api/race", "/api/today", "/api/in-depth", "/api/activities",
+                                       "/api/activities/1", "/api/data-quality", "/api/settings"])
+    def test_garmin_screens_belong_to_the_owner_alone(self, client, store, route):
+        set_up(client)
+        second_person(client, store)
+        response = client.get(route)
+        assert response.status_code == 403
+        assert response.json() == {"detail": "This account has no Garmin data here."}
+
+    def test_nor_can_they_change_settings_or_sync(self, client, store):
+        set_up(client)
+        second_person(client, store)
+        assert client.put("/api/settings", json={"trimp_curve": "female"}).status_code == 403
+        assert client.post("/api/sync").status_code == 403
+
+    def test_each_person_sees_only_their_own_passkeys(self, client, store):
+        set_up(client)
+        second_person(client, store)
+        passkeys = client.get("/api/auth/details").json()["passkeys"]
+        assert len(passkeys) == 1
+
+    def test_nobody_can_remove_someone_elses_passkey(self, client, store):
+        owner_passkey, _ = set_up(client)
+        sign_in(client, owner_passkey)
+        owners = client.get("/api/auth/details").json()["passkeys"]
+        client.post("/api/auth/sign-out")
+        user_id, _ = second_person(client, store)
+        # A second passkey of their own, so removing one would otherwise be allowed.
+        store.conn.execute("insert into auth_credential (credential_id, public_key, label, user_id) "
+                           "values ('\\x09', '\\x09', 'Laptop', %s)", (user_id,))
+        store.commit()
+        assert client.delete(f"/api/auth/passkeys/{owners[0]['id']}").status_code == 404
+        assert len(auth.list_passkeys(store.conn, auth.owner_id(store.conn))) == 1
+
+    def test_recovering_one_person_leaves_others_signed_in(self, client, store):
+        owner_passkey, _ = set_up(client)
+        owner = TestClient(api_module.app)
+        assert sign_in(owner, owner_passkey).status_code == 200
+        second_person(client, store)
+        assert signed_in(owner)
+
+    def test_a_recovery_code_only_ever_belongs_to_one_person(self, client, store):
+        _, owner_code = set_up(client)
+        second_person(client, store)
+        client.post("/api/auth/sign-out")
+        assert client.post("/api/auth/recover", json={"code": owner_code}).status_code == 200
+        session = auth.find_session(store.conn, client.cookies.get(auth.SESSION_COOKIE))
+        assert session["is_owner"] is True
+
+    def test_a_new_code_needs_one_of_your_own_passkeys(self, client, store):
+        owner_passkey, _ = set_up(client)
+        second_person(client, store)
+        options = client.post("/api/auth/sign-in/options").json()
+        response = client.post("/api/auth/recovery-code", json={"credential": owner_passkey.sign_in(options)})
+        assert response.status_code == 403
+
+
+class TestUpgrade:
+    """A deployment from before people existed keeps working, and everything it had becomes the owner's."""
+
+    def test_existing_sign_in_becomes_the_owners(self, conn):
+        from pathlib import Path
+
+        from creed.db.migrate import MIGRATIONS, migrate
+
+        conn.execute("create table schema_migration (version text primary key, "
+                     "applied_at timestamptz not null default now())")
+        for name in ("0001_init.sql", "0002_activity_derived.sql", "0003_auth.sql"):
+            conn.execute(Path(MIGRATIONS, name).read_text(encoding="utf-8"))
+            conn.execute("insert into schema_migration (version) values (%s)", (name,))
+        conn.execute("insert into app_secret (name, value) values ('passkey_user_handle', 'the-old-handle')")
+        conn.execute("insert into auth_credential (credential_id, public_key, label) values ('\x01', '\x02', 'iPhone')")
+        conn.execute("insert into auth_session (token_hash, kind, expires_at) values ('\x03', 'passkey', now() + interval '1 day')")
+        conn.execute("insert into auth_recovery_code (code_hash) values ('\x04')")
+        conn.commit()
+
+        assert migrate(conn) == ["0004_users.sql", "0005_food.sql", "0006_food_seed.sql"]
+        owner = conn.execute("select id, passkey_handle from app_user where is_owner").fetchone()
+        assert owner["passkey_handle"] == "the-old-handle"
+        for table in ("auth_credential", "auth_session", "auth_recovery_code"):
+            row = conn.execute(f"select user_id from {table}").fetchone()
+            assert row["user_id"] == owner["id"]
+        assert conn.execute("select count(*) as n from food where user_id = %s", (owner["id"],)).fetchone()["n"] == 30
+        assert conn.execute("select count(*) as n from app_secret where name = 'passkey_user_handle'").fetchone()[
+            "n"] == 0
+
+    def test_a_fresh_deployment_has_nobody_until_registration(self, store):
+        assert store.conn.execute("select count(*) as n from app_user").fetchone()["n"] == 0

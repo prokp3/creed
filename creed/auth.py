@@ -1,7 +1,8 @@
 """Signing in: passkeys, sessions and the recovery code. No web code here, so it can be tested directly.
 
-One deployment, one person, so there are no usernames. A passkey either belongs to this deployment or it doesn't.
-Each function leaves committing to its caller, except that a challenge is committed as soon as it's used, so a
+There are no usernames. Each passkey, session and recovery code belongs to a user (app_user), and a passkey
+finds its user by itself, so signing in never asks who you are. The owner is the person whose Garmin data this
+deployment syncs; the setup secret makes passkeys for them. Each function leaves committing to its caller, except that a challenge is committed as soon as it's used, so a
 failed answer can't be tried again.
 """
 from __future__ import annotations
@@ -34,15 +35,12 @@ from webauthn.helpers.structs import (
     UserVerificationRequirement,
 )
 
-from creed.db.store import Store
-
 log = logging.getLogger(__name__)
 
 APP_NAME = "Creed"
 ORIGIN_ENV_VAR = "CREED_ORIGIN"
 SETUP_SECRET_ENV_VAR = "CREED_SETUP_SECRET"
 MIN_SETUP_SECRET_LENGTH = 32
-USER_HANDLE_SECRET = "passkey_user_handle"
 
 SESSION_COOKIE = "creed_session"
 COOKIE_MAX_AGE_SECONDS = 365 * 24 * 3600  # The server decides when a session ends. See the lifetimes below.
@@ -123,15 +121,36 @@ def check_setup_secret(given: Any) -> None:
         raise Refused("That setup secret isn't right.", 403)
 
 
+# -- users ----------------------------------------------------------------
+
+
+def create_user(conn: psycopg.Connection, is_owner: bool = False) -> str:
+    """A new person, with the starter food library."""
+    row = conn.execute(
+        "insert into app_user (is_owner, passkey_handle) values (%s, %s) returning id",
+        (is_owner, secrets.token_urlsafe(32)),
+    ).fetchone()
+    conn.execute("select food_seed_library(%s)", (row["id"],))
+    return str(row["id"])
+
+
+def owner_id(conn: psycopg.Connection, create: bool = False) -> str | None:
+    """The person whose Garmin data this is. Made on first registration with the setup secret."""
+    row = conn.execute("select id from app_user where is_owner").fetchone()
+    if row is not None:
+        return str(row["id"])
+    return create_user(conn, is_owner=True) if create else None
+
+
 # -- challenges -----------------------------------------------------------
 
 
-def _save_challenge(conn: psycopg.Connection, challenge: bytes, purpose: str) -> None:
+def _save_challenge(conn: psycopg.Connection, challenge: bytes, purpose: str, user_id: str | None = None) -> None:
     conn.execute("delete from auth_challenge where expires_at <= now()")
     conn.execute(
-        "insert into auth_challenge (challenge, purpose, expires_at) "
-        "values (%s, %s, now() + make_interval(mins => %s))",
-        (challenge, purpose, CHALLENGE_MINUTES),
+        "insert into auth_challenge (challenge, purpose, expires_at, user_id) "
+        "values (%s, %s, now() + make_interval(mins => %s), %s)",
+        (challenge, purpose, CHALLENGE_MINUTES, user_id),
     )
     if purpose == "sign_in":
         conn.execute(
@@ -142,49 +161,48 @@ def _save_challenge(conn: psycopg.Connection, challenge: bytes, purpose: str) ->
         )
 
 
-def _take_challenge(conn: psycopg.Connection, credential: Any, purpose: str) -> bytes:
-    """Use up the challenge this answer claims to be for. Committed at once, so it can't be tried twice."""
+def _take_challenge(conn: psycopg.Connection, credential: Any, purpose: str) -> tuple[bytes, str | None]:
+    """Use up the challenge this answer claims to be for, and say whose it was. Committed at once, so it can't
+    be tried twice."""
     try:
         client_data = parse_client_data_json(base64url_to_bytes(credential["response"]["clientDataJSON"]))
         claimed = client_data.challenge
     except Exception:
         raise Refused("That answer couldn't be read.", 400) from None
     row = conn.execute(
-        "delete from auth_challenge where challenge = %s and purpose = %s and expires_at > now() returning challenge",
+        "delete from auth_challenge where challenge = %s and purpose = %s and expires_at > now() "
+        "returning challenge, user_id",
         (claimed, purpose),
     ).fetchone()
     conn.commit()
     if row is None:
         raise Refused("That attempt has expired. Try again.")
-    return bytes(row["challenge"])
+    return bytes(row["challenge"]), str(row["user_id"]) if row["user_id"] else None
 
 
 # -- passkeys -------------------------------------------------------------
 
 
-def _user_handle(conn: psycopg.Connection) -> bytes:
-    """Random and stable, so registering again on a device replaces its passkey for this app."""
-    store = Store(conn)
-    handle = store.get_secret(USER_HANDLE_SECRET)
-    if handle is None:
-        handle = secrets.token_urlsafe(32)
-        store.set_secret(USER_HANDLE_SECRET, handle)
-    return handle.encode()
+def _user_handle(conn: psycopg.Connection, user_id: str) -> bytes:
+    """Random and stable for each person, so registering again on a device replaces its passkey for this app."""
+    row = conn.execute("select passkey_handle from app_user where id = %s", (user_id,)).fetchone()
+    return row["passkey_handle"].encode()
 
 
 def has_passkey(conn: psycopg.Connection) -> bool:
     return conn.execute("select exists (select 1 from auth_credential) as found").fetchone()["found"]
 
 
-def registration_options(conn: psycopg.Connection) -> dict[str, Any]:
+def registration_options(conn: psycopg.Connection, user_id: str) -> dict[str, Any]:
+    """Options for a new passkey for this person."""
     rp = relying_party()
-    existing = conn.execute("select credential_id from auth_credential").fetchall()
+    existing = conn.execute("select credential_id from auth_credential where user_id = %s", (user_id,)).fetchall()
     options = generate_registration_options(
         rp_id=rp.rp_id,
         rp_name=APP_NAME,
         user_name=APP_NAME,
         user_display_name=APP_NAME,
-        user_id=_user_handle(conn),
+        user_id=_user_handle(conn, user_id),
         timeout=PASSKEY_TIMEOUT_MS,
         authenticator_selection=AuthenticatorSelectionCriteria(
             resident_key=ResidentKeyRequirement.REQUIRED,
@@ -192,13 +210,16 @@ def registration_options(conn: psycopg.Connection) -> dict[str, Any]:
         ),
         exclude_credentials=[PublicKeyCredentialDescriptor(id=bytes(row["credential_id"])) for row in existing],
     )
-    _save_challenge(conn, options.challenge, "register")
+    _save_challenge(conn, options.challenge, "register", user_id)
     return json.loads(options_to_json(options))
 
 
-def finish_registration(conn: psycopg.Connection, credential: Any, label: Any) -> None:
+def finish_registration(conn: psycopg.Connection, credential: Any, label: Any) -> str:
+    """Save the new passkey to the person its options were made for, and return who that is."""
     rp = relying_party()
-    challenge = _take_challenge(conn, credential, "register")
+    challenge, user_id = _take_challenge(conn, credential, "register")
+    if user_id is None:
+        raise Refused("That attempt has expired. Try again.")
     try:
         verified = verify_registration_response(
             credential=credential,
@@ -212,11 +233,12 @@ def finish_registration(conn: psycopg.Connection, credential: Any, label: Any) -
         raise Refused("That passkey couldn't be verified.") from None
     name = label.strip()[:MAX_LABEL_LENGTH] if isinstance(label, str) and label.strip() else "Passkey"
     conn.execute(
-        "insert into auth_credential (credential_id, public_key, sign_count, backed_up, label) "
-        "values (%s, %s, %s, %s, %s)",
+        "insert into auth_credential (credential_id, public_key, sign_count, backed_up, label, user_id) "
+        "values (%s, %s, %s, %s, %s, %s)",
         (verified.credential_id, verified.credential_public_key, verified.sign_count,
-         verified.credential_backed_up, name),
+         verified.credential_backed_up, name, user_id),
     )
+    return user_id
 
 
 def sign_in_options(conn: psycopg.Connection) -> dict[str, Any]:
@@ -230,16 +252,16 @@ def sign_in_options(conn: psycopg.Connection) -> dict[str, Any]:
     return json.loads(options_to_json(options))
 
 
-def check_passkey(conn: psycopg.Connection, credential: Any) -> None:
-    """Prove the owner holds a registered passkey and has just passed Face ID, or refuse."""
+def check_passkey(conn: psycopg.Connection, credential: Any) -> str:
+    """Prove someone holds a registered passkey and has just passed Face ID, and return whose it is, or refuse."""
     rp = relying_party()
-    challenge = _take_challenge(conn, credential, "sign_in")
+    challenge, _ = _take_challenge(conn, credential, "sign_in")
     try:
         credential_id = base64url_to_bytes(credential["rawId"])
     except Exception:
         raise Refused("That answer couldn't be read.", 400) from None
     stored = conn.execute(
-        "select public_key, sign_count from auth_credential where credential_id = %s", (credential_id,)
+        "select public_key, sign_count, user_id from auth_credential where credential_id = %s", (credential_id,)
     ).fetchone()
     if stored is None:
         raise Refused("This passkey isn't registered here. Use your recovery code.")
@@ -260,11 +282,14 @@ def check_passkey(conn: psycopg.Connection, credential: Any) -> None:
         "update auth_credential set sign_count = %s, backed_up = %s, last_used_at = now() where credential_id = %s",
         (verified.new_sign_count, verified.credential_backed_up, credential_id),
     )
+    return str(stored["user_id"])
 
 
-def list_passkeys(conn: psycopg.Connection) -> list[dict[str, Any]]:
+def list_passkeys(conn: psycopg.Connection, user_id: str) -> list[dict[str, Any]]:
     rows = conn.execute(
-        "select credential_id, label, backed_up, created_at, last_used_at from auth_credential order by created_at"
+        "select credential_id, label, backed_up, created_at, last_used_at from auth_credential where user_id = %s "
+        "order by created_at",
+        (user_id,),
     ).fetchall()
     return [
         {
@@ -278,13 +303,15 @@ def list_passkeys(conn: psycopg.Connection) -> list[dict[str, Any]]:
     ]
 
 
-def remove_passkey(conn: psycopg.Connection, encoded_id: str) -> None:
+def remove_passkey(conn: psycopg.Connection, user_id: str, encoded_id: str) -> None:
+    """One of your own passkeys. Someone else's is treated as not existing."""
     try:
         credential_id = base64url_to_bytes(encoded_id)
     except Exception:
         raise Refused("No such passkey.", 404) from None
-    count = conn.execute("select count(*) as n from auth_credential").fetchone()["n"]
-    found = conn.execute("select 1 from auth_credential where credential_id = %s", (credential_id,)).fetchone()
+    count = conn.execute("select count(*) as n from auth_credential where user_id = %s", (user_id,)).fetchone()["n"]
+    found = conn.execute("select 1 from auth_credential where credential_id = %s and user_id = %s",
+                         (credential_id, user_id)).fetchone()
     if found is None:
         raise Refused("No such passkey.", 404)
     if count <= 1:
@@ -295,23 +322,27 @@ def remove_passkey(conn: psycopg.Connection, encoded_id: str) -> None:
 # -- sessions -------------------------------------------------------------
 
 
-def start_session(conn: psycopg.Connection, kind: str = "passkey") -> str:
+def start_session(conn: psycopg.Connection, user_id: str, kind: str = "passkey") -> str:
     conn.execute("delete from auth_session where expires_at <= now()")
     token = secrets.token_urlsafe(32)
     lifetime = {"recovery": f"{RECOVERY_SESSION_MINUTES} minutes", "passkey": f"{SESSION_DAYS} days"}[kind]
     conn.execute(
-        "insert into auth_session (token_hash, kind, expires_at) values (%s, %s, now() + %s::interval)",
-        (_hash(token), kind, lifetime),
+        "insert into auth_session (token_hash, kind, expires_at, user_id) values (%s, %s, now() + %s::interval, %s)",
+        (_hash(token), kind, lifetime, user_id),
     )
     return token
 
 
-def save_dev_session(conn: psycopg.Connection, token: str) -> None:
-    """For tools/dev_api.py and the tests only. It's a normal row with a short life, so the API has one way in."""
+def save_dev_session(conn: psycopg.Connection, token: str, user_id: str | None = None) -> None:
+    """For tools/dev_api.py and the tests only. It's a normal row with a short life, so the API has one way in.
+
+    It's the owner's unless another user is named.
+    """
     conn.execute(
-        "insert into auth_session (token_hash, kind, expires_at) values (%s, 'dev', now() + %s::interval) "
-        "on conflict (token_hash) do update set expires_at = excluded.expires_at",
-        (_hash(token), f"{DEV_SESSION_HOURS} hours"),
+        "insert into auth_session (token_hash, kind, expires_at, user_id) "
+        "values (%s, 'dev', now() + %s::interval, %s) "
+        "on conflict (token_hash) do update set expires_at = excluded.expires_at, user_id = excluded.user_id",
+        (_hash(token), f"{DEV_SESSION_HOURS} hours", user_id or owner_id(conn, create=True)),
     )
 
 
@@ -320,8 +351,9 @@ def find_session(conn: psycopg.Connection, token: str | None) -> dict[str, Any] 
     if not token:
         return None
     row = conn.execute(
-        "select kind, now() - last_seen_at > interval '1 day' as stale from auth_session "
-        "where token_hash = %s and expires_at > now()",
+        "select s.kind, s.user_id, u.is_owner, now() - s.last_seen_at > interval '1 day' as stale "
+        "from auth_session s join app_user u on u.id = s.user_id "
+        "where s.token_hash = %s and s.expires_at > now()",
         (_hash(token),),
     ).fetchone()
     if row is None:
@@ -332,7 +364,7 @@ def find_session(conn: psycopg.Connection, token: str | None) -> dict[str, Any] 
             (f"{SESSION_DAYS} days", _hash(token)),
         )
         conn.commit()
-    return {"kind": row["kind"]}
+    return {"kind": row["kind"], "user_id": str(row["user_id"]), "is_owner": row["is_owner"]}
 
 
 def end_session(conn: psycopg.Connection, token: str | None) -> None:
@@ -340,38 +372,39 @@ def end_session(conn: psycopg.Connection, token: str | None) -> None:
         conn.execute("delete from auth_session where token_hash = %s", (_hash(token),))
 
 
-def end_all_sessions(conn: psycopg.Connection) -> None:
-    conn.execute("delete from auth_session")
+def end_all_sessions(conn: psycopg.Connection, user_id: str) -> None:
+    conn.execute("delete from auth_session where user_id = %s", (user_id,))
 
 
 # -- recovery code --------------------------------------------------------
 
 
-def new_recovery_code(conn: psycopg.Connection) -> str:
-    """Replace any existing code. This is the only time the code is ever available."""
+def new_recovery_code(conn: psycopg.Connection, user_id: str) -> str:
+    """Replace this person's code. This is the only time the code is ever available."""
     code = "".join(secrets.choice(RECOVERY_ALPHABET) for _ in range(RECOVERY_LENGTH))
-    conn.execute("delete from auth_recovery_code")
-    conn.execute("insert into auth_recovery_code (code_hash) values (%s)", (_hash(code),))
+    conn.execute("delete from auth_recovery_code where user_id = %s", (user_id,))
+    conn.execute("insert into auth_recovery_code (code_hash, user_id) values (%s, %s)", (_hash(code), user_id))
     return "-".join(code[i:i + 5] for i in range(0, RECOVERY_LENGTH, 5))
 
 
-def has_recovery_code(conn: psycopg.Connection) -> bool:
-    return conn.execute("select exists (select 1 from auth_recovery_code) as found").fetchone()["found"]
+def has_recovery_code(conn: psycopg.Connection, user_id: str) -> bool:
+    return conn.execute("select exists (select 1 from auth_recovery_code where user_id = %s) as found",
+                        (user_id,)).fetchone()["found"]
 
 
-def recovery_code_created(conn: psycopg.Connection) -> str | None:
-    row = conn.execute("select created_at from auth_recovery_code limit 1").fetchone()
+def recovery_code_created(conn: psycopg.Connection, user_id: str) -> str | None:
+    row = conn.execute("select created_at from auth_recovery_code where user_id = %s", (user_id,)).fetchone()
     return row["created_at"].isoformat() if row else None
 
 
-def use_recovery_code(conn: psycopg.Connection, given: Any) -> bool:
-    """True if this was the code, which is then gone for good. Forgiving about case, spacing and lookalikes."""
+def use_recovery_code(conn: psycopg.Connection, given: Any) -> str | None:
+    """Whose code this was, if it was one. It's then gone for good. Forgiving about case, spacing and lookalikes."""
     if not isinstance(given, str):
-        return False
+        return None
     cleaned = "".join(ch for ch in given.upper().translate(RECOVERY_LOOKALIKES) if ch in RECOVERY_ALPHABET)
     if len(cleaned) != RECOVERY_LENGTH:
-        return False
+        return None
     row = conn.execute(
-        "delete from auth_recovery_code where code_hash = %s returning code_hash", (_hash(cleaned),)
+        "delete from auth_recovery_code where code_hash = %s returning user_id", (_hash(cleaned),)
     ).fetchone()
-    return row is not None
+    return str(row["user_id"]) if row else None

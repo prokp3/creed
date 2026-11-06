@@ -1,4 +1,5 @@
-"""The sign-in routes. Registration is closed unless the setup secret or a just-used recovery code opens it."""
+"""The sign-in routes. Registration is closed unless the setup secret (for the owner) or a just-used recovery code
+(for that code's person) opens it."""
 from __future__ import annotations
 
 import json
@@ -23,9 +24,9 @@ async def _body(request: Request) -> dict[str, Any]:
     return body
 
 
-def _begin_session(request: Request, response: Response, conn: Conn, kind: str = "passkey") -> None:
+def _begin_session(request: Request, response: Response, conn: Conn, user_id: str, kind: str = "passkey") -> None:
     auth.end_session(conn, request.cookies.get(auth.SESSION_COOKIE))
-    token = auth.start_session(conn, kind)
+    token = auth.start_session(conn, user_id, kind)
     conn.commit()
     response.set_cookie(
         auth.SESSION_COOKIE,
@@ -51,11 +52,15 @@ def status(request: Request, conn: Conn) -> dict[str, Any]:
 
 @router.post("/register/options")
 async def register_options(request: Request, conn: Conn) -> dict[str, Any]:
+    """A recovery session makes a passkey for its own person. The setup secret makes one for the owner."""
     body = await _body(request)
     session = auth.find_session(conn, request.cookies.get(auth.SESSION_COOKIE))
-    if session is None or session["kind"] != "recovery":
+    if session is not None and session["kind"] == "recovery":
+        user_id = session["user_id"]
+    else:
         auth.check_setup_secret(body.get("setup_secret"))
-    options = auth.registration_options(conn)
+        user_id = auth.owner_id(conn, create=True)
+    options = auth.registration_options(conn, user_id)
     conn.commit()
     return options
 
@@ -63,9 +68,9 @@ async def register_options(request: Request, conn: Conn) -> dict[str, Any]:
 @router.post("/register/verify")
 async def register_verify(request: Request, response: Response, conn: Conn) -> dict[str, Any]:
     body = await _body(request)
-    auth.finish_registration(conn, body.get("credential"), body.get("label"))
-    code = None if auth.has_recovery_code(conn) else auth.new_recovery_code(conn)
-    _begin_session(request, response, conn)
+    user_id = auth.finish_registration(conn, body.get("credential"), body.get("label"))
+    code = None if auth.has_recovery_code(conn, user_id) else auth.new_recovery_code(conn, user_id)
+    _begin_session(request, response, conn, user_id)
     return {"recovery_code": code}
 
 
@@ -79,20 +84,21 @@ def sign_in_options(conn: Conn) -> dict[str, Any]:
 @router.post("/sign-in/verify")
 async def sign_in_verify(request: Request, response: Response, conn: Conn) -> dict[str, Any]:
     body = await _body(request)
-    auth.check_passkey(conn, body.get("credential"))
-    _begin_session(request, response, conn)
+    user_id = auth.check_passkey(conn, body.get("credential"))
+    _begin_session(request, response, conn, user_id)
     return {"signed_in": True}
 
 
 @router.post("/recover")
 async def recover(request: Request, response: Response, conn: Conn) -> dict[str, Any]:
-    """The code works once. Every other session ends, and a new code replaces it straight away."""
+    """The code works once. Every other session of its person ends, and a new code replaces it straight away."""
     body = await _body(request)
-    if not auth.use_recovery_code(conn, body.get("code")):
+    user_id = auth.use_recovery_code(conn, body.get("code"))
+    if user_id is None:
         raise auth.Refused("That recovery code isn't right, or it's already been used.")
-    auth.end_all_sessions(conn)
-    code = auth.new_recovery_code(conn)
-    _begin_session(request, response, conn, kind="recovery")
+    auth.end_all_sessions(conn, user_id)
+    code = auth.new_recovery_code(conn, user_id)
+    _begin_session(request, response, conn, user_id, kind="recovery")
     return {"recovery_code": code}
 
 
@@ -105,22 +111,25 @@ def sign_out(request: Request, response: Response, conn: Conn) -> dict[str, Any]
 
 
 @router.get("/details")
-def details(_: Session, conn: Conn) -> dict[str, Any]:
-    return {"passkeys": auth.list_passkeys(conn), "recovery_code_created_at": auth.recovery_code_created(conn)}
+def details(session: Session, conn: Conn) -> dict[str, Any]:
+    user_id = session["user_id"]
+    return {"passkeys": auth.list_passkeys(conn, user_id),
+            "recovery_code_created_at": auth.recovery_code_created(conn, user_id)}
 
 
 @router.delete("/passkeys/{encoded_id}")
-def remove_passkey(encoded_id: str, _: Session, conn: Conn) -> dict[str, Any]:
-    auth.remove_passkey(conn, encoded_id)
+def remove_passkey(encoded_id: str, session: Session, conn: Conn) -> dict[str, Any]:
+    auth.remove_passkey(conn, session["user_id"], encoded_id)
     conn.commit()
-    return {"passkeys": auth.list_passkeys(conn)}
+    return {"passkeys": auth.list_passkeys(conn, session["user_id"])}
 
 
 @router.post("/recovery-code")
-async def replace_recovery_code(request: Request, _: Session, conn: Conn) -> dict[str, Any]:
+async def replace_recovery_code(request: Request, session: Session, conn: Conn) -> dict[str, Any]:
     """Needs Face ID as well as the session, because whoever holds this code can get back in."""
     body = await _body(request)
-    auth.check_passkey(conn, body.get("credential"))
-    code = auth.new_recovery_code(conn)
+    if auth.check_passkey(conn, body.get("credential")) != session["user_id"]:
+        raise auth.Refused("Use one of your own passkeys.", 403)
+    code = auth.new_recovery_code(conn, session["user_id"])
     conn.commit()
     return {"recovery_code": code}

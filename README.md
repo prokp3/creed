@@ -2,13 +2,14 @@
 
 A personal triathlon dashboard built from your own Garmin data. It installs on your iPhone's home screen and works like an app, with Face ID sign-in. It was built for training towards IRONMAN 70.3 Goa, and the race date is a setting you can change.
 
-**Status: early development, in daily use.** It runs on Vercel and is used on a real iPhone. Notifications and themes are still to come; see [Roadmap](#roadmap).
+**Status: early development, in daily use.** It runs on Vercel and is used on a real iPhone. Notifications, themes and more of the food logger are still to come; see [Roadmap](#roadmap).
 
 ## What it does
 
 - **Today:** a race-bib countdown to the second, rings for recovery, strain and sleep (each hidden until there's enough data), resting heart rate, sleep against what you need, today's and this week's run, bike and swim, Garmin's own numbers, and your fitness trend.
 - **In-Depth:** fitness, fatigue and form, recovery and its inputs, sleep, weekly load, Garmin data, aerobic efficiency and data quality, over 7, 30, 90 or 180 days. Every computed number has a "Why this number" panel with its formula, inputs, window, confidence and source.
 - **Activities:** every activity with its load, filtered by run, bike or swim. Runs and rides have a **route map** drawn from your watch's GPS, with gaps left where the watch lost signal.
+- **Food:** log meals in a tap or two. Save a meal as a preset and log it again with one tap, with an undo. Search a starter library of 30 staple foods (typical values) and log them in pieces, katoris, glasses or grams, or quick add something eaten once. Calories and protein rings fill against your training day or rest day targets, and Creed decides the day type from your Garmin workouts unless you choose. Your other nutrients are listed too, along with what you've eaten against Garmin's calorie burn, which is an estimate. A food that doesn't list a nutrient counts as unknown, not zero, and the total says so.
 - **Syncing:** every 30 minutes on a schedule, once a day as a backup, and whenever you tap the sync time on Today.
 - **Feels like an app:** Face ID sign-in with passkeys, screen animations, and haptic taps on iPhone through an unofficial workaround that may not work on every iOS version.
 - **Honest numbers:** values from Garmin are shown unchanged and tagged Garmin. Creed's own values are tagged Computed, and Creed shows "not enough data" rather than guess. Missing days are never filled in.
@@ -143,12 +144,14 @@ Creed signs you in with a passkey, which on an iPhone means Face ID. A passkey i
 - **The tab bar is cut off, or the top of the screen is blurred.** You're probably running a home-screen app installed before this was fixed. iOS only reads the status bar setting when the app is added, so delete Creed from the home screen and add it again. Your passkey is kept in iCloud, so you just sign in with Face ID.
 - **Signing in says to set `CREED_ORIGIN`.** It's missing from Vercel, or you didn't redeploy after adding it.
 - **The sync time on Today turns red.** The last sync failed. "Garmin key problem" usually means the key has expired.
+- **Something breaks right after you update your copy.** New versions can add database tables. Run `.venv/Scripts/python -m creed.db.migrate` again; it only applies what's new.
 - **The Actions run failed.** Check that `CREED_URL` and `CRON_SECRET` in GitHub match your address and the `CRON_SECRET` in Vercel.
 
 ## How your data is kept
 
-- **One deployment, one person.** Your copy holds only your data, in your own database.
-- **Server side only.** Row-level security is on for every table with no policies, and Supabase's public roles have no access. Secrets and keys never reach the browser.
+- **One deployment, one person's Garmin data.** Your copy holds only your Garmin data, in your own database. Only the account that set up the deployment sees it.
+- **Food is kept per person.** Every food table records whose row it is. For food, the server switches to a restricted database role, and row-level security policies let it see only the signed-in person's rows. Each query also filters by person, as a second guard.
+- **Server side only.** Row-level security is on for every table, and Supabase's public roles have no access. Secrets and keys never reach the browser.
 - **Nothing is filled in.** A day with no data has no row. Values that fail validation are kept but flagged, and metrics leave them out.
 - **Dates:** sleep and HRV belong to the day you woke up, as on Garmin. Times are stored in UTC along with your local offset.
 - **Sources:** each value records whether it came from Garmin's API, the account export or a manual entry, so those can be added without changing the database.
@@ -201,6 +204,7 @@ The server uses whichever database `DATABASE_URL` points at, so a passkey you ma
 - **Notifications:** "Recovery is ready", "Garmin key expiring soon" and "Sync failed". The settings for them are already there.
 - **A full Data Quality page.**
 - **Themes.**
+- **More food logging:** adding and editing your own foods, a barcode scanner, trends, reminders, CSV import and export, and logging with no signal.
 - **A hosted version for everyone.** Later, I plan to host Creed on my own server so that anyone can create an account with an ID and password, connect their own Garmin, and use it without setting anything up. Connecting other people's Garmin accounts needs Garmin's approval through its Connect Developer Program, because the Personal API this version uses is only for your own data. Creed will never ask for your Garmin password. Until then, follow [Run your own Creed](#run-your-own-creed).
 
 ## Never commit

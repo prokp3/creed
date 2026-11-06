@@ -6,7 +6,7 @@ const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matc
 export const revealMs = () => (reduced() ? 0 : 200);
 
 /** Where a screen sits, so going deeper slides in from the right and coming back slides the other way. */
-const DEPTH = { today: 0, 'in-depth': 0, activities: 0, settings: 1, activity: 1, 'activity-map': 2 };
+const DEPTH = { today: 0, 'in-depth': 0, activities: 0, food: 0, settings: 1, activity: 1, 'activity-map': 2 };
 
 /** Which movement a change of screen deserves, or null if the screen isn't changing. */
 export function motionBetween(from, to) {

@@ -15,7 +15,8 @@ from creed import auth, config
 from creed import settings as app_settings
 from creed.api import views
 from creed.api.auth_routes import router as auth_router
-from creed.api.deps import Conn, Session
+from creed.api.food_routes import router as food_router
+from creed.api.deps import Conn, OwnerSession
 from creed.db import reads
 from creed.db.store import Store
 from creed.garmin import fit, track
@@ -79,6 +80,7 @@ def sign_in_not_configured(_request: Request, exc: auth.NotConfigured) -> JSONRe
 
 
 app.include_router(auth_router)
+app.include_router(food_router)
 
 
 def _secret_matches(given: str | None, expected: str | None) -> bool:
@@ -128,7 +130,7 @@ def health() -> dict[str, str]:
 
 
 @app.get("/api/race")
-def race_countdown(_: Session, conn: Conn) -> dict[str, Any]:
+def race_countdown(_: OwnerSession, conn: Conn) -> dict[str, Any]:
     """Just the countdown, so the bib on every screen doesn't need the whole of today's numbers."""
     saved = app_settings.load(conn)
     metric_settings = saved.for_metrics()
@@ -140,7 +142,7 @@ def race_countdown(_: Session, conn: Conn) -> dict[str, Any]:
 
 
 @app.get("/api/today")
-def today_screen(_: Session, conn: Conn) -> dict[str, Any]:
+def today_screen(_: OwnerSession, conn: Conn) -> dict[str, Any]:
     _saved, ctx = _context(conn)
     results = compute_all(ctx)
     series = reads.metric_series(conn, GARMIN_DAILY, ctx.today - timedelta(days=GARMIN_LATEST_DAYS), ctx.today)
@@ -158,7 +160,7 @@ def today_screen(_: Session, conn: Conn) -> dict[str, Any]:
 
 
 @app.get("/api/in-depth")
-def in_depth_screen(_: Session, conn: Conn, days: Annotated[int, Query()] = 90) -> dict[str, Any]:
+def in_depth_screen(_: OwnerSession, conn: Conn, days: Annotated[int, Query()] = 90) -> dict[str, Any]:
     if days not in (7, 30, 90, 180):
         raise HTTPException(status_code=422, detail="days must be 7, 30, 90 or 180.")
     _saved, ctx = _context(conn)
@@ -170,7 +172,7 @@ def in_depth_screen(_: Session, conn: Conn, days: Annotated[int, Query()] = 90) 
 
 @app.get("/api/activities")
 def activities(
-    _: Session,
+    _: OwnerSession,
     conn: Conn,
     discipline: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 30,
@@ -185,7 +187,7 @@ def activities(
 
 
 @app.get("/api/activities/{activity_id}")
-def activity_detail(activity_id: int, _: Session, conn: Conn) -> dict[str, Any]:
+def activity_detail(activity_id: int, _: OwnerSession, conn: Conn) -> dict[str, Any]:
     row = reads.get_activity(conn, activity_id)
     if row is None:
         raise HTTPException(status_code=404, detail="No such activity.")
@@ -200,7 +202,7 @@ def activity_detail(activity_id: int, _: Session, conn: Conn) -> dict[str, Any]:
 
 
 @app.get("/api/activities/{activity_id}/route")
-def activity_route(activity_id: int, _: Session, conn: Conn) -> dict[str, Any]:
+def activity_route(activity_id: int, _: OwnerSession, conn: Conn) -> dict[str, Any]:
     """One run or ride's GPS line, read from its file only when someone opens its map, and never saved."""
     row = reads.get_activity(conn, activity_id)
     if row is None:
@@ -214,7 +216,7 @@ def activity_route(activity_id: int, _: Session, conn: Conn) -> dict[str, Any]:
 
 
 @app.get("/api/data-quality")
-def data_quality(_: Session, conn: Conn) -> dict[str, Any]:
+def data_quality(_: OwnerSession, conn: Conn) -> dict[str, Any]:
     saved, ctx = _context(conn)
     last_28 = sum(1 for n in ctx.sleep if (ctx.today - n.day).days < 28)
     return {
@@ -226,13 +228,13 @@ def data_quality(_: Session, conn: Conn) -> dict[str, Any]:
 
 
 @app.get("/api/settings")
-def get_settings(_: Session, conn: Conn) -> dict[str, Any]:
+def get_settings(_: OwnerSession, conn: Conn) -> dict[str, Any]:
     saved, ctx = _context(conn)
     return views.settings_view(saved, ctx)
 
 
 @app.put("/api/settings")
-async def put_settings(request: Request, _: Session, conn: Conn) -> dict[str, Any]:
+async def put_settings(request: Request, _: OwnerSession, conn: Conn) -> dict[str, Any]:
     changes = await request.json()
     if not isinstance(changes, dict):
         raise HTTPException(status_code=422, detail="Send an object of settings to change.")
@@ -273,7 +275,7 @@ def cron_sync(conn: Conn) -> Response:
 
 
 @app.post("/api/sync")
-def sync_now(_: Session, conn: Conn) -> dict[str, Any]:
+def sync_now(_: OwnerSession, conn: Conn) -> dict[str, Any]:
     """The Sync now button. One at a time, so repeated taps can't send Garmin several syncs at once."""
     if reads.sync_running(conn, SYNC_RUNNING_MINUTES):
         raise HTTPException(status_code=409, detail="A sync is already running. Try again in a minute.")

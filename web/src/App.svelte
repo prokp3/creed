@@ -11,12 +11,15 @@
   import ActivityDetail from './screens/ActivityDetail.svelte';
   import ActivityMap from './screens/ActivityMap.svelte';
   import Settings from './screens/Settings.svelte';
+  import Food from './screens/Food.svelte';
+  import FoodToast from './components/FoodToast.svelte';
   import SignIn from './screens/SignIn.svelte';
 
   const TABS = [
     { id: 'today', label: 'Today' },
     { id: 'in-depth', label: 'In-Depth' },
     { id: 'activities', label: 'Activities' },
+    { id: 'food', label: 'Food' },
   ];
 
   function parse(hash) {
@@ -24,6 +27,8 @@
     if (name === 'settings') return { screen: 'settings', tab: null };
     if (name === 'activities' && id && part === 'map') return { screen: 'activity-map', tab: 'activities', id };
     if (name === 'activities' && id) return { screen: 'activity', tab: 'activities', id };
+    // #/food/protein opens that nutrient's detail, and #/food/add the add sheet.
+    if (name === 'food') return { screen: 'food', tab: 'food', id: id ?? null };
     if (TABS.some((t) => t.id === name)) return { screen: name, tab: name };
     return { screen: 'today', tab: 'today' };
   }
@@ -79,6 +84,9 @@
   {#if route.screen === 'activity-map'}
     <ActivityMap id={route.id} />
   {/if}
+  {#if visited.has('food')}
+    <Food active={route.screen === 'food'} {freshness} open={route.screen === 'food' ? route.id : null} />
+  {/if}
   {#if visited.has('settings')}
     <Settings active={route.screen === 'settings'} onsaved={refreshRace} {freshness} />
   {/if}
@@ -90,6 +98,8 @@
       </a>
     {/each}
   </nav>
+
+  <FoodToast besideButton={route.screen === 'food'} />
 {:else if auth.status === 'signed-out'}
   <SignIn hasPasskey={auth.hasPasskey} onfinished={checkAuth} />
 {:else if auth.status === 'unreachable'}
@@ -121,7 +131,7 @@
     bottom: 0;
     flex: none;
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     padding-bottom: var(--safe-bottom);
     border-top: 1px solid var(--line);
     background: var(--bg);

@@ -3,6 +3,8 @@
   color-scheme: dark;
   --bg: #08080a;
   --card: #141417;
+  --sheet: #17171b;
+  --raised: #222228;
   --line: #26262c;
   --track: #2a2a30;
   --border: #3a3a42;
@@ -17,6 +19,9 @@
   --swim: #38bdf8;
   --bike: #ffc233;
   --run: #3ddc97;
+  /* Protein's own accent, so its ring never reads as calories. 7.35:1 on the background; always labelled, since
+     it can look like swim blue to some colour-blind eyes. */
+  --protein: #a78bfa;
   --display: 'Barlow Condensed', 'Arial Narrow', sans-serif;
   --body: Barlow, Arial, sans-serif;
   --gutter: 16px;

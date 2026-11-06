@@ -1,5 +1,6 @@
 <script>
   import DisciplineRing from '../components/DisciplineRing.svelte';
+  import FoodCard from '../components/FoodCard.svelte';
   import Icon from '../components/Icon.svelte';
   import Ring from '../components/Ring.svelte';
   import Screen from '../components/Screen.svelte';
@@ -186,6 +187,8 @@
         {/if}
       </div>
     {/if}
+
+    <FoodCard {active} {freshness} />
 
     <section class="gutter stack">
       <h2 class="section-heading">Today</h2>
