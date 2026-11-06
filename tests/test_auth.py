@@ -505,7 +505,7 @@ class TestOtherSites:
         assert response.headers["Cache-Control"] == "no-store"
 
     def test_the_scheduled_sync_has_no_browser_and_uses_its_own_secret(self, client, monkeypatch):
-        monkeypatch.setenv("CREED_CRON_SECRET", "cron-secret")
+        monkeypatch.setenv("CRON_SECRET", "cron-secret")
         response = client.post("/api/cron/sync", headers={"Origin": "https://github.com"})
         assert response.status_code == 401
 

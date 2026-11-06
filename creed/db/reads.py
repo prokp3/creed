@@ -61,6 +61,14 @@ def latest_run(conn: psycopg.Connection) -> dict[str, Any] | None:
     ).fetchone()
 
 
+def sync_running(conn: psycopg.Connection, within_minutes: int) -> bool:
+    return conn.execute(
+        "select exists (select 1 from sync_run where status = 'running' "
+        "and started_at > now() - make_interval(mins => %s)) as running",
+        (within_minutes,),
+    ).fetchone()["running"]
+
+
 def last_good_run(conn: psycopg.Connection) -> datetime | None:
     row = conn.execute(
         "select max(finished_at) as finished_at from sync_run where status in ('ok', 'partial')"

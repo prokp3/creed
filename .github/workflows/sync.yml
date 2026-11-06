@@ -1,0 +1,43 @@
+name: Sync Garmin data
+
+on:
+  schedule:
+    # Every 30 minutes, UTC. Off the hour, because the start of each hour is GitHub's busiest moment.
+    - cron: "7,37 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: garmin-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Ask Creed to sync
+        env:
+          CREED_URL: ${{ secrets.CREED_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        # This repo is public, so anyone can read this log. It prints the outcome and nothing else.
+        # What went wrong is recorded in Creed, behind sign-in.
+        run: |
+          if [ -z "$CREED_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "::error::Add the CREED_URL and CRON_SECRET repository secrets."
+            exit 1
+          fi
+          code=$(curl --silent --show-error --max-time 295 --output response.json --write-out '%{http_code}' \
+            --request POST --header "Authorization: Bearer $CRON_SECRET" "${CREED_URL%/}/api/cron/sync")
+          if [ "$code" != "200" ]; then
+            echo "::error::Creed answered HTTP $code."
+            exit 1
+          fi
+          status=$(jq -r .status response.json)
+          echo "Sync finished: $status"
+          case "$status" in
+            ok) ;;
+            partial) echo "::warning::Part of the sync didn't finish. The next run tries again." ;;
+            *) echo "::error::The sync didn't work. Creed shows the reason."; exit 1 ;;
+          esac

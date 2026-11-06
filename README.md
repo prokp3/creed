@@ -1,12 +1,51 @@
 # Creed
 
-A personal triathlon dashboard built from your own Garmin data, installed on your iPhone's home screen as a web app.
+A personal triathlon dashboard built from your own Garmin data. It installs on your iPhone's home screen and works like an app, with Face ID sign-in. It was built for training towards IRONMAN 70.3 Goa, and the race date is a setting you can change.
 
-**Status: early development.** The data-availability probe, the Garmin sync, the metrics, the API, the screens and passkey sign-in work on a local computer. Sign-in has been tested with a simulated passkey and with Windows Hello, not yet on a real iPhone. The scheduled sync, notifications and the account-export importer will be added here as they are built.
+**Status: early development, in daily use.** It runs on Vercel and is used on a real iPhone. Notifications, the account-export importer and themes are still to come; see [Roadmap](#roadmap).
 
-## Set up for development
+## What it does
 
-This needs Python 3.12 or newer. On macOS or Linux, use `.venv/bin/python` in place of `.venv/Scripts/python`.
+- **Today:** a race-bib countdown to the second, rings for recovery, strain and sleep (each hidden until there's enough data), resting heart rate, sleep against what you need, today's and this week's run, bike and swim, Garmin's own numbers, and your fitness trend.
+- **In-Depth:** fitness, fatigue and form, recovery and its inputs, sleep, weekly load, Garmin data, aerobic efficiency and data quality, over 7, 30, 90 or 180 days. Every computed number has a "Why this number" panel with its formula, inputs, window, confidence and source.
+- **Activities:** every activity with its load, filtered by run, bike or swim. Runs and rides have a **route map** drawn from your watch's GPS, with gaps left where the watch lost signal.
+- **Syncing:** every 30 minutes on a schedule, once a day as a backup, and whenever you tap the sync time on Today.
+- **Feels like an app:** Face ID sign-in with passkeys, screen animations, and haptic taps on iPhone through an unofficial workaround that may not work on every iOS version.
+- **Honest numbers:** values from Garmin are shown unchanged and tagged Garmin. Creed's own values are tagged Computed, and Creed shows "not enough data" rather than guess. Missing days are never filled in.
+
+## Run your own Creed
+
+You can run your own copy for free. It takes about an hour, mostly creating accounts. Every command is for Windows; on macOS or Linux, use `.venv/bin/python` in place of `.venv/Scripts/python`.
+
+### What you need
+
+- A Garmin watch that syncs to Garmin Connect
+- An iPhone (Android should work too, but hasn't been tried)
+- Free accounts on [GitHub](https://github.com), [Supabase](https://supabase.com) and [Vercel](https://vercel.com)
+- On your computer: [Python](https://www.python.org/downloads/) 3.12 or newer, [Node.js](https://nodejs.org) 22, and [Git](https://git-scm.com)
+
+### 1. Get your Garmin key
+
+1. Fork this repo on GitHub, then clone your fork and open a terminal in its folder. Run every command from that folder.
+2. Create a key on the [Garmin Connect key page](https://connect.garmin.com/app/settings/personalApiToken). Garmin only shows it once. Note the expiry date you choose.
+3. Save it. What you type stays hidden, and the key is stored in your user folder, outside this project:
+
+   ```bash
+   python tools/garmin_probe.py --save-key
+   ```
+4. Optionally, see what your account can provide. It takes 5–15 minutes and writes a report to `probe-output/`, which git ignores:
+
+   ```bash
+   python tools/garmin_probe.py
+   ```
+
+### 2. Create the database
+
+1. On Supabase, create a new project. Pick the region nearest you and keep the database password somewhere safe.
+2. Choose **Connect**, then the **Direct** tab, then **Transaction pooler**. Copy that connection string and put your password in it.
+3. Copy `.env.example` to `.env`, and set `DATABASE_URL` in it to that string. Never commit `.env`.
+
+### 3. Copy your data in
 
 ```bash
 python -m venv .venv
@@ -16,160 +55,152 @@ python -m venv .venv
 .venv/Scripts/python -m pip install -e ".[dev]"
 ```
 
-Run all the tests. They start their own temporary Postgres, so they need no accounts or network:
-
 ```bash
-.venv/Scripts/python -m pytest
+.venv/Scripts/python -m creed.db.migrate
 ```
 
-## Sync your Garmin data
-
-1. Save your Garmin key using the steps below.
-2. Create a free [Supabase](https://supabase.com) project and copy its **Transaction pooler** connection string.
-3. Copy `.env.example` to `.env`, then set `DATABASE_URL` in it.
-4. Create the tables:
-
-   ```bash
-   .venv/Scripts/python -m creed.db.migrate
-   ```
-5. Copy your data. A run stops at 150 requests or 240 seconds, and the next run carries on from there:
-
-   ```bash
-   .venv/Scripts/python -m creed.sync
-   ```
-
-## Run the app on your computer
-
-This needs [Node.js](https://nodejs.org) as well, and a database filled by the steps above. Install the web tools once:
-
 ```bash
-npm --prefix web install
+.venv/Scripts/python -m creed.sync
 ```
 
-Start the API and leave it running. It listens on this computer only. It keeps a random token in `.dev-token` and saves it as a 24-hour session in the database `DATABASE_URL` points at, so keep that file private:
+A sync stops after 150 requests or 240 seconds, so the first one may not bring in all your history. Run it again until it stops saying "History is still being copied". Later syncs take a few seconds.
 
-```bash
-.venv/Scripts/python tools/dev_api.py
-```
+### 4. Put it online with Vercel
 
-In a second terminal, start the web app, then open http://localhost:5173. Use `localhost` rather than `127.0.0.1`, because passkeys need a domain name:
-
-```bash
-npm --prefix web run dev
-```
-
-You start signed in. To try the real sign-in screens, sign out in Settings. Restart the API to start signed in again.
-
-Run the web tests with:
-
-```bash
-npm --prefix web test
-```
-
-## Signing in
-
-Creed signs you in with a passkey, which on an iPhone means Face ID. A passkey isn't a password you choose. Your device creates it and keeps it, and the server only ever holds its public half.
-
-**The first time:**
-
-1. Choose the app's final address and set `CREED_ORIGIN` to it. See "If the address changes" below.
-2. Make a setup secret and set `CREED_SETUP_SECRET` to it:
+1. On Vercel, choose **Add New**, then **Project**, and import your fork.
+2. Choose a **Project Name**. It sets your address, `https://<name>.vercel.app`, and passkeys are tied to that address for good, so pick one you'll keep. Leave the other settings alone, because `vercel.json` sets them. Click **Deploy**. The site loads but can't sign you in yet.
+3. Check the address under **Domains** on the project page. If the name was taken, Vercel may have changed it.
+4. Make two long secrets. Run this twice and keep both in a password manager. The first is your **setup secret**, the second your **cron secret**:
 
    ```bash
    python -c "import secrets; print(secrets.token_urlsafe(32))"
    ```
-
-   A real address needs at least 32 characters, because anyone who guesses the secret can add their own passkey and read your data. On `http://localhost`, which only your computer can reach, any length works.
-3. Open the app, enter the secret, and create your passkey.
-4. Save the recovery code it shows you. You'll only see it once.
-
-**Adding a passkey later:** registration stays closed without the secret. To add one, choose **Add a passkey with the setup secret** on the sign-in screen. To shut registration completely, delete `CREED_SETUP_SECRET` from the server once you're set up, and add it back if you need it.
-
-**Staying signed in:** a session lasts 30 days from the last time you used the app. Settings lists your passkeys and lets you sign out.
-
-**If you lose your passkey:** use your recovery code on the sign-in screen. It works once, signs out every other device and gives you a new code. That session lasts an hour, so create a new passkey straight away, then remove the lost one in Settings. If you lose the code while you can still sign in, replace it in Settings.
-
-**If the address changes:** a passkey is tied for good to the address it was made on. If `CREED_ORIGIN` changes:
-
-- Every passkey stops working, and you're signed out.
-- The app on your home screen still points at the old address, so delete it and add it again from the new one.
-
-To get back in, set `CREED_ORIGIN` to the new address, open it, and use your recovery code or the setup secret to create a new passkey. Neither of those is tied to the address. Then remove the old passkey in Settings.
-
-## Deploy your own copy
-
-This runs free on Vercel's Hobby plan, which is for personal, non-commercial use, and Supabase's Free plan. The scheduled sync isn't built yet, so for now run `.venv/Scripts/python -m creed.sync` on your computer to bring in new data.
-
-1. Follow "Sync your Garmin data" above, so your database has its tables and data.
-2. Fork this repo. On [Vercel](https://vercel.com), choose **Add New**, then **Project**, and import your fork.
-3. Choose a **Project Name**. It decides your address, `https://<name>.vercel.app`, and passkeys are tied to that address for good, so pick one you'll keep. Leave the other settings alone, because `vercel.json` sets them, and deploy. The site will load but can't sign you in yet.
-4. Check the address under **Domains** on the project page. If the name was taken, Vercel may have changed it.
-5. Make two long secrets. Run this twice and keep the results in a password manager:
-
-   ```bash
-   python -c "import secrets; print(secrets.token_urlsafe(32))"
-   ```
-6. Go to the project's main sidebar, because this page isn't inside **Settings**. Choose **Environment Variables** and add these for **Production only**:
+5. In the project's main sidebar, not inside **Settings**, choose **Environment Variables**. Add each of these with only **Production** selected. Use the **Secret** type for all but `CREED_ORIGIN`:
 
    | Name | Value |
    |---|---|
    | `DATABASE_URL` | Your Supabase Transaction pooler string |
    | `GARMIN_PERSONAL_API_KEY` | Your Garmin key |
-   | `CREED_ORIGIN` | Your address from step 4, starting with `https://` and with no slash at the end |
-   | `CREED_SETUP_SECRET` | The first secret |
-   | `CREED_CRON_SECRET` | The second secret |
-7. In **Deployments**, open the menu beside the latest one and choose **Redeploy**. New settings only apply to new deployments.
-8. Open `https://<name>.vercel.app/api/health`. It should say `{"status":"ok"}`.
-9. On your iPhone, open your address in Safari, tap **Share**, then **Add to Home Screen**. Open Creed from the home screen, enter the setup secret, create your passkey with Face ID, and save the recovery code.
+   | `CREED_ORIGIN` | Your address from step 3, starting with `https://` and with no slash at the end |
+   | `CREED_SETUP_SECRET` | Your setup secret |
+   | `CRON_SECRET` | Your cron secret |
+6. Go to **Deployments**, open the menu beside the latest one, and choose **Redeploy**. Settings only apply to new deployments.
+7. Open `https://<name>.vercel.app/api/auth/status`. It should show `"signed_in":false`. If it shows an error, check `DATABASE_URL`.
 
-`vercel.json` runs the API in Mumbai (`bom1`), next to a Mumbai database. If your database is somewhere else, change `regions` to match.
+`vercel.json` runs the server in Mumbai (`bom1`), next to a Mumbai database. If your database is somewhere else, change `regions` to the [Vercel region](https://vercel.com/docs/regions) nearest it.
 
-## How the data is stored
+### 5. Install it on your iPhone
 
-- **One deployment, one person.** There are no user accounts in the database.
-- **Dates:** sleep and HRV belong to the date you woke up, matching Garmin's `calendarDate`. Timestamps are stored in UTC along with your local offset at the time.
-- **Sources:** each row records whether it came from the API, the account export or a manual entry, so those can be added without changing the schema.
+1. Open your address in Safari, tap **Share**, then **Add to Home Screen**.
+2. Open Creed from the home screen, enter your setup secret, and create your passkey with Face ID.
+3. Save the recovery code it shows you somewhere safe. You'll only see it once.
+
+### 6. Turn on the scheduled sync
+
+1. In your GitHub repo, go to **Settings**, **Secrets and variables**, **Actions**, and add these repository secrets:
+
+   | Name | Value |
+   |---|---|
+   | `CREED_URL` | Your address, like `https://<name>.vercel.app` |
+   | `CRON_SECRET` | Your cron secret, the same as in Vercel |
+2. GitHub turns schedules off on forks, so open the **Actions** tab and enable workflows.
+3. Choose **Sync Garmin data**, then **Run workflow**, to check it works.
+
+That's it. From now on, Creed syncs on its own. Change the race date, time zone and heart-rate settings in **Settings**, behind the gear on Today.
+
+## How syncing works
+
+- **Every 30 minutes:** GitHub Actions asks your app to sync. GitHub can run this late when it's busy, and may occasionally skip one.
+- **Once a day:** Vercel does the same, between 5:30 and 6:29 AM India time, as a backup. To suit your time zone, change `crons` in `vercel.json`. It's in UTC, and the free plan allows one run a day, at some point within the hour you choose.
+- **Whenever you want:** tap the sync time at the top of Today. It refuses to start a second sync while one is running.
+- **If the 30-minute sync stops:** GitHub turns schedules off on public repositories after 60 days with no repository activity. The daily sync carries on. To turn it back on, go to **Actions**, choose **Sync Garmin data**, and enable it.
+- **The logs are public.** Anyone can read Actions logs on a public repository, so the workflow prints only whether the sync worked. The reason for a failure is recorded in the app.
+- **Your Garmin key expires.** Make a new one before the date you noted and replace `GARMIN_PERSONAL_API_KEY` in Vercel, then redeploy.
+
+## Signing in
+
+Creed signs you in with a passkey, which on an iPhone means Face ID. A passkey isn't a password. Your device creates it and keeps it, and the server only ever holds its public half.
+
+- **Adding a passkey later:** registration stays closed without the setup secret. To add one, choose **Add a passkey with the setup secret** on the sign-in screen. To close registration completely, delete `CREED_SETUP_SECRET` from Vercel once you're set up, and add it back if you need it.
+- **Staying signed in:** a session lasts 30 days from the last time you used the app. Settings lists your passkeys and lets you sign out.
+- **If you lose your passkey:** use your recovery code on the sign-in screen. It works once, signs out every other device and gives you a new code. That session lasts an hour, so create a new passkey straight away, then remove the lost one in Settings. If you lose the code while you can still sign in, replace it in Settings.
+- **If the address changes:** a passkey is tied for good to the address it was made on. Every passkey stops working and you're signed out. Set `CREED_ORIGIN` to the new address, redeploy, then delete the home-screen app and add it again from the new address. Use your recovery code or setup secret to make a new passkey, because neither is tied to the address. Then remove the old passkey in Settings.
+
+## Troubleshooting
+
+- **The tab bar is cut off, or the top of the screen is blurred.** You're probably running a home-screen app installed before this was fixed. iOS only reads the status bar setting when the app is added, so delete Creed from the home screen and add it again. Your passkey is kept in iCloud, so you just sign in with Face ID.
+- **Signing in says to set `CREED_ORIGIN`.** It's missing from Vercel, or you didn't redeploy after adding it.
+- **The sync time on Today turns red.** The last sync failed. "Garmin key problem" usually means the key has expired.
+- **The Actions run failed.** Check that `CREED_URL` and `CRON_SECRET` in GitHub match your address and the `CRON_SECRET` in Vercel.
+
+## How your data is kept
+
+- **One deployment, one person.** Your copy holds only your data, in your own database.
+- **Server side only.** Row-level security is on for every table with no policies, and Supabase's public roles have no access. Secrets and keys never reach the browser.
 - **Nothing is filled in.** A day with no data has no row. Values that fail validation are kept but flagged, and metrics leave them out.
-- **Server side only.** Row-level security is on for every table with no policies, and Supabase's public API roles have no access.
-- **GPS stays in the file.** Positions are only read from an activity's FIT file when you open its map, and they're never saved anywhere else. [OpenFreeMap](https://openfreemap.org) supplies the map, with no key and no account, so opening one shows them which area you're looking at.
+- **Dates:** sleep and HRV belong to the day you woke up, as on Garmin. Times are stored in UTC along with your local offset.
+- **Sources:** each value records whether it came from Garmin's API, the account export or a manual entry, so those can be added without changing the database.
+- **GPS stays in the file.** Positions are only read from an activity's file when you open its map, and they're never saved anywhere else. [OpenFreeMap](https://openfreemap.org) supplies the map, with no key and no account, so opening one shows them which area you're looking at.
 
 ## Metrics
 
-The metrics live in `creed/metrics/`, with no web or database code, and every formula is tested against a hand-worked example. Each one reports its formula, inputs, window, confidence and citation, and says so plainly when there isn't enough data rather than guessing. To add a metric, write one module with a `compute(ctx)` function and list it in `creed/metrics/__init__.py`.
+The metrics live in `creed/metrics/`, with no web or database code, and every formula is tested against a worked example. To add one, write a module with a `compute(ctx)` function and list it in `creed/metrics/__init__.py`.
 
-Values tagged Computed are this project's own and don't try to match Garmin or Whoop. Whoop's algorithm is proprietary and isn't replicated. Values tagged Garmin are shown unmodified.
+Values tagged Computed are Creed's own and don't try to match Garmin or Whoop. Whoop's method is proprietary and isn't copied.
 
-To check the metrics against your own history, run this. It prints aggregates of your health data to the screen and saves nothing:
+To check the metrics against your own history, run this. It prints totals and patterns from your health data to the screen, and saves nothing:
 
 ```bash
 .venv/Scripts/python tools/backtest.py
 ```
 
-## Check what your Garmin account can provide
+## Working on the code
 
-The probe reports which data your account returns and how far back it goes. It needs Python 3.12 or newer and nothing else.
+Run the tests. They start their own temporary database, so they need no accounts or network:
 
-1. Create a key on the [Garmin Connect key page](https://connect.garmin.com/app/settings/personalApiToken). Garmin only shows it once.
-2. Save it. Your input stays hidden, and the key is stored in your user folder, outside this project:
+```bash
+.venv/Scripts/python -m pytest
+```
 
-   ```bash
-   python tools/garmin_probe.py --save-key
-   ```
-3. Run the probe. It usually takes 5–15 minutes and writes its report to `probe-output/`:
+```bash
+npm --prefix web install
+```
 
-   ```bash
-   python tools/garmin_probe.py
-   ```
+```bash
+npm --prefix web test
+```
+
+To run the app on your computer, start the server in one terminal and leave it running. It listens on your computer only, and starts you signed in through a 24-hour session kept in `.dev-token`, which git ignores:
+
+```bash
+.venv/Scripts/python tools/dev_api.py
+```
+
+Then start the web app in a second terminal and open http://localhost:5173. Use `localhost`, not `127.0.0.1`, because passkeys need a domain name:
+
+```bash
+npm --prefix web run dev
+```
+
+The server uses whichever database `DATABASE_URL` points at, so a passkey you make on your computer goes into your real database. It only works on `localhost`, so remove it in Settings afterwards.
+
+## Roadmap
+
+- **Notifications:** "Recovery is ready", "Garmin key expiring soon" and "Sync failed". The settings for them are already there.
+- **Account-export importer:** bring in older history from Garmin's export file.
+- **A full Data Quality page.**
+- **Themes.**
+- **A hosted version for everyone.** Later, I plan to host Creed on my own server so that anyone can create an account with an ID and password, connect their own Garmin, and use it without setting anything up. Connecting other people's Garmin accounts needs Garmin's approval through its Connect Developer Program, because the Personal API this version uses is only for your own data. Creed will never ask for your Garmin password. Until then, follow [Run your own Creed](#run-your-own-creed).
 
 ## Never commit
 
-Keep secrets, Garmin tokens, FIT files, personal data and logos out of this repo. `.gitignore` covers the usual locations, including `probe-output/`, whose reports hold aggregates of your health data.
+Keep secrets, Garmin keys and tokens, FIT files, personal data and logos out of this repo. `.gitignore` covers the usual places, including `.env`, `.dev-token` and `probe-output/`.
 
 ## Unofficial project
 
 Creed is an independent project. It is not affiliated with, endorsed by or sponsored by Garmin or The IRONMAN Group. Garmin, IRONMAN and related names are trademarks of their respective owners.
 
-Each person who deploys Creed uses their own Garmin Personal API key and is responsible for following Garmin's terms. Garmin describes the Personal API as being for an individual's own data, not for commercial applications serving multiple users.
+Each person who runs their own copy uses their own Garmin Personal API key and is responsible for following Garmin's terms. Garmin describes the Personal API as being for an individual's own data, not for commercial applications serving multiple users.
 
 ## License
 

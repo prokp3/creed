@@ -18,7 +18,9 @@
     zonedClock,
     zonedDate,
   } from '../lib/format.js';
+  import { post } from '../lib/api.js';
   import { revealMs } from '../lib/motion.js';
+  import { refreshRace } from '../lib/race.svelte.js';
   import { resource } from '../lib/resource.svelte.js';
   import { slide } from 'svelte/transition';
 
@@ -34,6 +36,25 @@
   });
 
   let showHidden = $state(false);
+  let syncing = $state(false);
+  let syncProblem = $state(null);
+
+  // Pulls from Garmin straight away rather than waiting for the next scheduled sync.
+  async function syncNow() {
+    if (syncing) return;
+    syncing = true;
+    syncProblem = null;
+    try {
+      const result = await post('/api/sync');
+      if (['failed', 'auth_failed'].includes(result.status)) syncProblem = "The sync didn't work. Try again later.";
+      await res.load();
+      refreshRace();
+    } catch (failure) {
+      syncProblem = failure.message;
+    } finally {
+      syncing = false;
+    }
+  }
 
   function ringText(ring) {
     if (ring.key === 'sleep') return { value: clock(ring.value), sub: `OF ${clock(ring.need_seconds)}` };
@@ -96,11 +117,17 @@
 <Screen {active}>
   <div class="top gutter">
     <h1 class="page-heading">{data ? dayHeading(data.today) : 'Today'}</h1>
-    <span class="sync" class:attention={syncText.attention}>{syncText.text}</span>
+    <button class="sync pressable" class:attention={syncText.attention} disabled={syncing} onclick={syncNow} aria-label={syncing ? 'Syncing with Garmin' : `${syncText.text}. Sync now`}>
+      <span class="spin" class:on={syncing}><Icon name="refresh" size={14} stroke={2.2} /></span>
+      {syncing ? 'Syncing…' : syncText.text}
+    </button>
     <a class="gear pressable" href="#/settings" aria-label="Settings"><Icon name="settings" size={22} /></a>
   </div>
 
   <StatusNote resource={res} />
+  {#if syncProblem}
+    <div class="gutter"><p class="note attention" role="alert">{syncProblem}</p></div>
+  {/if}
 
   {#if data}
     <div class="gutter rings" class:two={data.rings.length === 2}>
@@ -274,9 +301,30 @@
   }
 
   .sync {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 44px;
     margin-left: auto;
+    padding: 0 4px;
+    border: 0;
+    background: transparent;
     font-size: 12px;
     color: var(--ink-3);
+  }
+
+  .spin {
+    display: inline-flex;
+  }
+
+  .spin.on {
+    animation: turn 0.9s linear infinite;
+  }
+
+  @keyframes turn {
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   .sync.attention {

@@ -8,6 +8,7 @@
     other: 'M12 3v18 M3 12h18',
     multisport: 'M4 12h16 M12 4l8 8-8 8',
     settings: 'M4 7h10 M18 7h2 M4 17h2 M10 17h10 M18 7a2 2 0 1 1-4 0a2 2 0 1 1 4 0 M10 17a2 2 0 1 1-4 0a2 2 0 1 1 4 0',
+    refresh: 'M20 12a8 8 0 1 1-2.34-5.66 M20 4v4h-4',
     back: 'M15 5l-7 7 7 7',
     forward: 'M9 5l7 7-7 7',
     down: 'M6 9l6 6 6-6',

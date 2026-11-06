@@ -25,7 +25,7 @@ DATA_ROUTES = ["/api/race", "/api/today", "/api/in-depth", "/api/activities", "/
 @pytest.fixture
 def client(store, database_url, monkeypatch):
     monkeypatch.setenv("DATABASE_URL", database_url)
-    monkeypatch.setenv("CREED_CRON_SECRET", CRON)
+    monkeypatch.setenv("CRON_SECRET", CRON)
     auth.save_dev_session(store.conn, TOKEN)
     store.commit()
     return TestClient(api_module.app)
@@ -345,6 +345,36 @@ class TestCronSync:
         assert body["records"] > 0
         assert store.conn.execute("select trigger from sync_run order by id desc limit 1").fetchone() == {"trigger": "cron"}
 
+    def test_vercels_daily_run_arrives_as_get(self, client, monkeypatch):
+        with MockGarmin(TODAY, history_days=20) as server:
+            monkeypatch.setenv("GARMIN_PERSONAL_API_BASE_URL", server.url)
+            monkeypatch.setenv("GARMIN_PERSONAL_API_KEY", GOOD_KEY)
+            monkeypatch.setattr(Client.__init__, "__kwdefaults__", {**Client.__init__.__kwdefaults__, "delay": 0})
+            response = client.get("/api/cron/sync", headers={"Authorization": f"Bearer {CRON}"})
+        assert response.status_code == 200
+        assert response.json()["status"] == "ok"
+
+    @pytest.mark.parametrize("method", ["get", "post"])
+    def test_refuses_without_the_secret_either_way(self, client, method):
+        call = getattr(client, method)
+        assert call("/api/cron/sync").status_code == 401
+        assert call("/api/cron/sync", headers={"Authorization": "Bearer wrong"}).status_code == 401
+
+    @pytest.mark.parametrize("method", ["get", "post"])
+    def test_with_no_secret_on_the_server_nobody_gets_in(self, client, method, monkeypatch):
+        monkeypatch.delenv("CRON_SECRET")
+        call = getattr(client, method)
+        assert call("/api/cron/sync", headers={"Authorization": "Bearer "}).status_code == 401
+        assert call("/api/cron/sync", headers={"Authorization": f"Bearer {CRON}"}).status_code == 401
+
+    def test_the_response_holds_nothing_personal(self, client, monkeypatch):
+        with MockGarmin(TODAY, history_days=20) as server:
+            monkeypatch.setenv("GARMIN_PERSONAL_API_BASE_URL", server.url)
+            monkeypatch.setenv("GARMIN_PERSONAL_API_KEY", GOOD_KEY)
+            monkeypatch.setattr(Client.__init__, "__kwdefaults__", {**Client.__init__.__kwdefaults__, "delay": 0})
+            body = client.post("/api/cron/sync", headers={"Authorization": f"Bearer {CRON}"}).json()
+        assert set(body) == {"status", "requests", "records", "backfill_pending", "message"}
+
     def test_reports_a_bad_key_without_exposing_it(self, client, monkeypatch):
         with MockGarmin(TODAY) as server:
             monkeypatch.setenv("GARMIN_PERSONAL_API_BASE_URL", server.url)
@@ -353,3 +383,56 @@ class TestCronSync:
             response = client.post("/api/cron/sync", headers={"Authorization": f"Bearer {CRON}"})
         assert response.json()["status"] == "auth_failed"
         assert "bad-key-value" not in json.dumps(response.json())
+
+
+class TestSyncNow:
+    @pytest.fixture
+    def garmin(self, monkeypatch):
+        with MockGarmin(TODAY, history_days=20) as server:
+            monkeypatch.setenv("GARMIN_PERSONAL_API_BASE_URL", server.url)
+            monkeypatch.setenv("GARMIN_PERSONAL_API_KEY", GOOD_KEY)
+            monkeypatch.setattr(Client.__init__, "__kwdefaults__", {**Client.__init__.__kwdefaults__, "delay": 0})
+            yield server
+
+    def test_needs_a_session(self, client):
+        assert client.post("/api/sync").status_code == 401
+        assert client.post("/api/sync", headers={"Authorization": f"Bearer {CRON}"}).status_code == 401
+
+    def test_pulls_from_garmin_and_says_when(self, client, store, garmin):
+        response = client.post("/api/sync", headers=AUTH)
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "ok"
+        assert body["sync"]["latest_run"]["trigger"] == "manual"
+        assert body["sync"]["last_good_finish"] is not None
+        assert store.conn.execute("select count(*) as n from activity").fetchone()["n"] > 0
+        store.commit()
+
+    def test_says_nothing_personal(self, client, garmin):
+        body = client.post("/api/sync", headers=AUTH).json()
+        assert set(body) == {"status", "sync"}
+
+    def test_one_at_a_time(self, client, store, garmin):
+        store.start_run("cron")
+        store.commit()
+        response = client.post("/api/sync", headers=AUTH)
+        assert response.status_code == 409
+        assert "already running" in response.json()["detail"]
+
+    def test_a_run_that_died_long_ago_does_not_block_it(self, client, store, garmin):
+        run_id = store.start_run("cron")
+        store.conn.execute("update sync_run set started_at = now() - interval '20 minutes' where id = %s", (run_id,))
+        store.commit()
+        assert client.post("/api/sync", headers=AUTH).status_code == 200
+
+    def test_another_site_cannot_start_one(self, client, monkeypatch):
+        monkeypatch.setenv("CREED_ORIGIN", "https://creed.example")
+        response = client.post("/api/sync", headers={**AUTH, "Origin": "https://evil.example"})
+        assert response.status_code == 403
+
+    def test_reports_a_missing_garmin_key_without_failing(self, client, monkeypatch):
+        monkeypatch.delenv("GARMIN_PERSONAL_API_KEY", raising=False)
+        monkeypatch.setattr("creed.garmin.keys.DEFAULT_KEY_FILE", __import__("pathlib").Path("/no/such/key"))
+        response = client.post("/api/sync", headers=AUTH)
+        assert response.status_code == 200
+        assert response.json()["status"] == "auth_failed"

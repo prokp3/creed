@@ -31,6 +31,8 @@ app = FastAPI(title="Creed", docs_url=None, redoc_url=None, openapi_url=None)
 ISSUE_LOOKBACK_DAYS = 7
 SYNC_TIME_BUDGET_SECONDS = 240
 SYNC_MAX_REQUESTS = 150
+# A run that started this recently and hasn't finished is still going. Longer than any run can last.
+SYNC_RUNNING_MINUTES = 6
 GARMIN_DAILY = ["body_battery_latest", "body_battery_max", "body_battery_min", "body_battery_charged",
                 "body_battery_drained", "stress_avg", "stress_qualifier", "hrv_status", "hrv_last_night_avg",
                 "hrv_weekly_avg", "hrv_balanced_low", "hrv_balanced_high", "resting_hr", "steps",
@@ -86,7 +88,7 @@ def _secret_matches(given: str | None, expected: str | None) -> bool:
 def require_cron(request: Request) -> None:
     header = request.headers.get("Authorization", "")
     token = header.removeprefix("Bearer ") if header.startswith("Bearer ") else None
-    if not _secret_matches(token, os.environ.get("CREED_CRON_SECRET")):
+    if not _secret_matches(token, os.environ.get("CRON_SECRET")):
         raise HTTPException(status_code=401, detail="Not allowed.")
 
 
@@ -244,15 +246,13 @@ async def put_settings(request: Request, _: Session, conn: Conn) -> dict[str, An
     return views.settings_view(saved, ctx)
 
 
-@app.post("/api/cron/sync", dependencies=[Depends(require_cron)])
-def cron_sync(conn: Conn) -> Response:
-    """Called on a schedule by GitHub Actions, with a secret only it holds."""
+def _sync(conn: psycopg.Connection, trigger: str) -> dict[str, Any]:
     saved = app_settings.load(conn)
     store = Store(conn)
     try:
         api_key = resolve_api_key()
     except AuthFailed:
-        return JSONResponse({"status": "auth_failed", "message": "The Garmin key isn't configured."}, status_code=200)
+        return {"status": "auth_failed", "message": "The Garmin key isn't configured."}
     client = Client(
         os.environ.get(BASE_URL_ENV_VAR, DEFAULT_BASE_URL),
         api_key,
@@ -261,6 +261,21 @@ def cron_sync(conn: Conn) -> Response:
         token=store.get_secret(TOKEN_SECRET),
         on_token=lambda token, expires: store.set_secret(TOKEN_SECRET, token, expires),
     )
-    result = run_sync(store, client, today=_today(saved.timezone), trigger="cron")
-    return JSONResponse({"status": result.status, "requests": result.requests, "records": result.records,
-                         "backfill_pending": result.backfill_pending, "message": result.message})
+    result = run_sync(store, client, today=_today(saved.timezone), trigger=trigger)
+    return {"status": result.status, "requests": result.requests, "records": result.records,
+            "backfill_pending": result.backfill_pending, "message": result.message}
+
+
+@app.api_route("/api/cron/sync", methods=["GET", "POST"], dependencies=[Depends(require_cron)])
+def cron_sync(conn: Conn) -> Response:
+    """Called on a schedule by GitHub Actions (POST) and once a day by Vercel (GET), with a secret only they hold."""
+    return JSONResponse(_sync(conn, "cron"))
+
+
+@app.post("/api/sync")
+def sync_now(_: Session, conn: Conn) -> dict[str, Any]:
+    """The Sync now button. One at a time, so repeated taps can't send Garmin several syncs at once."""
+    if reads.sync_running(conn, SYNC_RUNNING_MINUTES):
+        raise HTTPException(status_code=409, detail="A sync is already running. Try again in a minute.")
+    result = _sync(conn, "manual")
+    return {"status": result["status"], "sync": _sync_status(conn)}
