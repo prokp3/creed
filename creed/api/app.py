@@ -8,10 +8,10 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Annotated, Any
 
 import psycopg
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
+from fastapi import Body, Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
 
-from creed import auth, config, notify
+from creed import auth, config, feedback, notify
 from creed import settings as app_settings
 from creed.api import views
 from creed.api.auth_routes import router as auth_router
@@ -155,6 +155,26 @@ def count_try_click(conn: Conn) -> dict[str, int]:
     ).fetchone()
     conn.commit()
     return {"count": int(row["value"])}
+
+
+@app.post("/api/public/feedback")
+def send_feedback(data: Annotated[dict[str, Any], Body()]) -> dict[str, bool]:
+    """A bug report or feature idea from the public feedback page, passed on to the creator's form, which emails them.
+
+    Nothing is stored here. The hidden "website" field is left empty by people and filled by many bots, so a filled one
+    is quietly accepted and dropped.
+    """
+    if isinstance(data.get("website"), str) and data["website"].strip():
+        return {"sent": True}
+    try:
+        report = feedback.clean(data)
+    except feedback.InvalidFeedback as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    try:
+        feedback.send(report)
+    except feedback.NotDelivered:
+        raise HTTPException(status_code=502, detail="It didn't go through. Please try again in a minute.") from None
+    return {"sent": True}
 
 
 @app.get("/api/race")

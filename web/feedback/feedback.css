@@ -1,0 +1,25 @@
+/* The feedback page, on top of the homepage's look (welcome.css). */
+.kinds { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 12px; border: 0; margin: 0; padding: 0; }
+.kind { position: relative; display: block; cursor: pointer; }
+.kind input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.kind .card { display: block; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.55); padding: 22px 22px 20px; transition: border-color .25s, background-color .25s, transform .3s var(--ease); }
+.kind:hover .card { transform: translateY(-3px); }
+.kind input:checked + .card { border-color: var(--ink); background: #fff; box-shadow: inset 0 -3px 0 var(--red); }
+.kind input:focus-visible + .card { outline: 2px solid var(--red); outline-offset: 3px; }
+.kind .title { display: flex; align-items: center; gap: 10px; font: 600 26px/1 'Barlow Condensed', 'Arial Narrow', sans-serif; }
+.kind .hint { display: block; margin-top: 8px; color: var(--ink-3); font-size: 15px; }
+
+.form-grid { display: grid; gap: 28px; }
+.field textarea {
+  min-height: 180px; padding: 12px 2px; border: 0; border-bottom: 1px solid var(--ink); border-radius: 0; resize: vertical;
+  background: transparent; color: var(--ink); font: 400 17px/1.55 Barlow, Arial, sans-serif;
+}
+.field textarea:focus { outline: none; border-bottom: 2px solid var(--red); }
+.field .help { color: var(--ink-3); font-size: 14px; }
+.count { color: var(--ink-4); font-size: 13px; text-align: right; }
+.trap { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+
+.status { margin: 0; font-size: 16px; }
+.status.problem { color: var(--red); }
+.sent { border-top: 2px solid var(--ink); padding-top: 40px; }
+.btn[disabled] { opacity: .55; cursor: progress; }

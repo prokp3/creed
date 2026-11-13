@@ -26,8 +26,8 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET' || url.origin !== self.location.origin || url.pathname.startsWith('/api/')) {
     return;
   }
-  // The public homepage isn't part of the app: leave it to the network so it's never saved as the app's page.
-  if (url.pathname.startsWith('/welcome')) {
+  // The public pages aren't part of the app: leave them to the network so they're never saved as the app's page.
+  if (url.pathname.startsWith('/welcome') || url.pathname.startsWith('/feedback')) {
     return;
   }
   if (event.request.mode === 'navigate') {

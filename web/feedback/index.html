@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Report a bug or share an idea · Creed</title>
+    <meta name="description" content="Found a bug in Creed, or want it to do something new? Tell Kartikeya directly." />
+    <meta name="theme-color" content="#F6F5F1" />
+    <link rel="icon" href="/icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <script type="module" src="./feedback.js"></script>
+  </head>
+  <body>
+    <div class="page topo">
+      <svg class="grain" aria-hidden="true" width="100%" height="100%"><filter id="grain"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3" stitchTiles="stitch"></feTurbulence><feColorMatrix type="saturate" values="0"></feColorMatrix></filter><rect width="100%" height="100%" filter="url(#grain)"></rect></svg>
+      <svg class="wm" viewBox="0 0 1024 1024" aria-hidden="true"><path d="M706 336 A262 262 0 1 0 706 688" fill="none" stroke="rgba(10,10,11,0.06)" stroke-width="88" stroke-linecap="round"></path><circle cx="773" cy="512" r="60" fill="rgba(211,18,42,0.2)"></circle></svg>
+
+      <header class="wrap fade" style="padding-top: 24px; padding-bottom: 24px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px">
+        <a href="/welcome/" class="navlogo" style="display: flex; align-items: center; gap: 10px; text-decoration: none; min-height: 44px">
+          <svg viewBox="0 0 1024 1024" width="26" height="26" aria-hidden="true"><path d="M706 336 A262 262 0 1 0 706 688" fill="none" stroke="#0a0a0b" stroke-width="96" stroke-linecap="round"></path><circle cx="773" cy="512" r="64" fill="#d3122a"></circle></svg>
+          <span class="h" style="font-size: 20px; font-weight: 700; letter-spacing: 0.16em">CREED</span>
+        </a>
+        <nav aria-label="Main" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px 28px; font-size: 15px">
+          <a href="/welcome/" class="link">Homepage</a>
+          <a href="/" class="link" style="color: #5a5a60">Sign in</a>
+        </nav>
+      </header>
+
+      <main class="wrap" style="max-width: 860px; padding-top: 56px; padding-bottom: 120px">
+        <p class="lbl rise">Feedback</p>
+        <h1 class="h rise i1" style="margin: 20px 0 0; font-size: clamp(52px, 8vw, 104px); line-height: 0.9; animation-delay: .1s">Found a bug?<br />Got an idea<span style="color: #d3122a">?</span></h1>
+        <p class="rise" style="margin: 28px 0 0; max-width: 560px; font-size: 20px; color: #3a3a40; animation-delay: .2s">Tell me what broke or what you'd love Creed to do. It comes straight to my inbox, and I read every one.</p>
+
+        <form id="feedback-form" novalidate style="margin-top: 56px">
+          <div class="form-grid rise" style="animation-delay: .3s">
+            <fieldset class="kinds">
+              <legend class="lbl" style="margin-bottom: 12px; font-size: 12px">What is it?</legend>
+              <label class="kind">
+                <input type="radio" name="kind" value="bug" checked />
+                <span class="card"><span class="title"><span class="dot" style="background: #d3122a"></span>A bug</span><span class="hint">Something broke, looks wrong, or shows the wrong number.</span></span>
+              </label>
+              <label class="kind">
+                <input type="radio" name="kind" value="idea" />
+                <span class="card"><span class="title"><span class="dot" style="background: #3ddc97"></span>A feature idea</span><span class="hint">Something you wish Creed did, or did differently.</span></span>
+              </label>
+            </fieldset>
+
+            <label class="field">
+              <span class="lbl" style="font-size: 12px">Short title</span>
+              <input id="fb-title" name="title" type="text" maxlength="120" required autocomplete="off" placeholder="e.g. Sync time stays red after a sync" />
+            </label>
+
+            <label class="field">
+              <span class="lbl" style="font-size: 12px" id="details-label">What happened?</span>
+              <textarea id="fb-details" name="details" maxlength="4000" required placeholder="What you did, what you expected, and what you saw instead."></textarea>
+              <span class="count"><span id="details-count">0</span> / 4000</span>
+            </label>
+
+            <label class="field">
+              <span class="lbl" style="font-size: 12px">Your phone or browser <span style="text-transform: none; letter-spacing: 0">(optional)</span></span>
+              <input id="fb-device" name="device" type="text" maxlength="200" autocomplete="off" />
+              <span class="help">Filled in for you from this browser. Change it if the problem was on another device.</span>
+            </label>
+
+            <label class="field">
+              <span class="lbl" style="font-size: 12px">Your email <span style="text-transform: none; letter-spacing: 0">(optional)</span></span>
+              <input id="fb-email" name="email" type="email" maxlength="200" autocomplete="email" inputmode="email" />
+              <span class="help">Only if you'd like a reply, or don't mind me asking a follow-up question. Have a screenshot? Leave your email and I'll ask for it.</span>
+            </label>
+
+            <label class="trap" aria-hidden="true">Website<input name="website" type="text" tabindex="-1" autocomplete="off" /></label>
+
+            <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px 24px">
+              <button id="fb-send" type="submit" class="btn btn-red" style="font-size: 18px">Send it <span aria-hidden="true">→</span></button>
+              <p id="fb-status" class="status" role="status" aria-live="polite"></p>
+            </div>
+          </div>
+        </form>
+
+        <section id="fb-sent" class="sent" hidden tabindex="-1" aria-labelledby="sent-title" style="margin-top: 56px">
+          <p class="lbl">Sent</p>
+          <h2 id="sent-title" class="h" style="margin: 16px 0 0; font-size: clamp(40px, 6vw, 72px); line-height: 0.95">Thank you<span style="color: #d3122a">.</span></h2>
+          <p style="margin: 20px 0 0; max-width: 520px; color: #3a3a40">It's in my inbox. If you left your email, I'll get back to you.</p>
+          <div style="margin-top: 32px; display: flex; flex-wrap: wrap; gap: 14px 28px; align-items: center">
+            <button id="fb-another" type="button" class="btn btn-ink">Send another <span aria-hidden="true">→</span></button>
+            <a href="/welcome/" class="link" style="font-weight: 500">Back to the homepage</a>
+          </div>
+        </section>
+      </main>
+
+      <footer style="border-top: 1px solid #d9d7d0">
+        <div class="wrap" style="padding-top: 28px; padding-bottom: 40px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; font-size: 13px; color: #5a5a60">
+          <span><span class="h" style="font-weight: 700; letter-spacing: 0.14em; color: #0a0a0b; font-size: 16px">CREED</span> · by Kartikeya · <a href="https://github.com/prokp3/creed" class="link" style="color: #5a5a60">GitHub</a></span>
+          <span>Creed's server doesn't keep what you send. It goes to my Google Form, which emails me.</span>
+        </div>
+      </footer>
+    </div>
+  </body>
+</html>
