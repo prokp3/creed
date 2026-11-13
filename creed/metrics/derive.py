@@ -28,7 +28,7 @@ MIN_HR_COVERAGE = 0.9
 MIN_MOVING_SPEED_MPS = 1.0
 STEADY_DISCIPLINES = {"run"}
 # Treadmill speed comes from the wrist and isn't reliable enough to compare.
-EXCLUDED_TYPES = {"treadmill_running", "indoor_running"}
+EXCLUDED_TYPES = {"treadmill_running", "indoor_running", "virtual_run"}
 
 
 @dataclass

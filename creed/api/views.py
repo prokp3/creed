@@ -12,6 +12,7 @@ from dataclasses import asdict
 from datetime import date, timedelta
 from typing import Any
 
+from creed import config
 from creed.metrics import hr_params, strain
 from creed.metrics.base import OK, MetricContext, MetricResult
 
@@ -59,7 +60,7 @@ def resting_hr_view(ctx: MetricContext) -> dict[str, Any] | None:
             continue
         baseline = [v for d, v in ctx.resting_hr.items()
                     if timedelta(0) < day - d <= timedelta(days=RESTING_BASELINE_DAYS)]
-        return {"value": value, "day": day.isoformat(), "tag": "Garmin",
+        return {"value": value, "day": day.isoformat(), "tag": config.source_label(),
                 "difference": value - statistics.fmean(baseline) if baseline else None}
     return None
 
@@ -110,7 +111,7 @@ def today_view(ctx: MetricContext, results: dict[str, MetricResult], garmin: dic
     else:
         hidden.append({"key": "sleep", "label": "Sleep", "reason": sleep.reason})
     if hidden and resting:
-        rings.append({"key": "resting_hr", "label": "Resting HR", "tag": "Garmin", "value": resting["value"],
+        rings.append({"key": "resting_hr", "label": "Resting HR", "tag": config.source_label(), "value": resting["value"],
                       "unit": "bpm", "fraction": 1.0, "attention": False, "day": resting["day"]})
 
     # These sit under the rings only when they aren't already a ring.
@@ -200,7 +201,7 @@ def in_depth_view(ctx: MetricContext, results: dict[str, MetricResult], garmin_s
             "weekly_why": metric_json(results["weekly"])["why"],
         },
         "garmin": {
-            "tag": "Garmin",
+            "tag": config.source_label(),
             "latest": garmin_latest,
             "body_battery_max": daily_series(garmin_series.get("body_battery_max", {}), days, ctx.today),
             "stress_avg": daily_series(garmin_series.get("stress_avg", {}), days, ctx.today),
@@ -215,6 +216,7 @@ def settings_view(settings: Any, ctx: MetricContext) -> dict[str, Any]:
     params = hr_params.estimate(ctx)
     return {
         **asdict(settings),
+        "data_source": {"key": config.data_source(), "label": config.source_label()},
         "estimates": {"max_hr": params.max_hr, "max_hr_source": params.max_source,
                       "resting_hr": params.resting_hr, "resting_hr_source": params.resting_source},
     }

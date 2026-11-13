@@ -1,12 +1,12 @@
 <script>
-  // Whether a day uses training or rest targets. Garmin decides unless you choose.
+  // Whether a day uses training or rest targets. Your synced workouts decide unless you choose.
   import Sheet from './Sheet.svelte';
   import { setDayType } from '../lib/food.svelte.js';
 
   let { date, dayType, isOwner = true, onclose } = $props();
 
   const choices = $derived([
-    { value: null, label: 'Decide from Garmin', note: isOwner ? `Training once a workout of ${dayType.threshold_minutes} minutes or more syncs. Rest until then.` : 'No Garmin data here, so it stays a rest day.' },
+    { value: null, label: 'Decide from my workouts', note: isOwner ? `Training once a workout of ${dayType.threshold_minutes} minutes or more syncs. Rest until then.` : 'No workouts sync here, so it stays a rest day.' },
     { value: 'training', label: 'Training day', note: 'Use training day targets.' },
     { value: 'rest', label: 'Rest day', note: 'Use rest day targets.' },
   ]);

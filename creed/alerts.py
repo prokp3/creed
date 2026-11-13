@@ -225,7 +225,8 @@ def key_expiring(expires: date | None, today: date) -> Note | None:
 FAILED = ("failed", "auth_failed")
 
 
-def sync_failed(runs: Sequence[Mapping[str, Any]], last_good: datetime | None, timezone: Any) -> Note | None:
+def sync_failed(runs: Sequence[Mapping[str, Any]], last_good: datetime | None, timezone: Any,
+                source: str = "Garmin") -> Note | None:
     """runs are finished syncs, newest first. One notification per run of failures, named by its first run.
     The error text isn't included: it stays in the app."""
     streak = []
@@ -236,7 +237,7 @@ def sync_failed(runs: Sequence[Mapping[str, Any]], last_good: datetime | None, t
     if not streak or (streak[0]["status"] != "auth_failed" and len(streak) < 2):
         return None
     if streak[0]["status"] == "auth_failed":
-        body = "Garmin refused the key, so syncing has stopped until it's fixed."
+        body = f"{source} refused the key, so syncing has stopped until it's fixed."
     else:
         body = f"The last {len(streak)} syncs failed."
     if last_good is not None:

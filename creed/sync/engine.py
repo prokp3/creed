@@ -37,6 +37,29 @@ MAX_FILE_ATTEMPTS = 3
 DERIVE_VERSION = 3
 
 
+def derive_pending(store: Store) -> None:
+    """Read each new FIT file once and keep the numbers the metrics need. Shared by every data source."""
+    while True:
+        pending = store.activity_files_to_derive(DERIVE_VERSION, 20)
+        if not pending:
+            return
+        rows = []
+        for item in pending:
+            fit = unzip_fit(bytes(item["content"]))
+            samples, _ = read_samples(fit) if fit else ([], None)
+            result = derive(samples, item["discipline"], item["type_key"])
+            rows.append({
+                "activity_id": item["activity_id"], "derive_version": DERIVE_VERSION,
+                "samples": result.samples, "hr_coverage": result.hr_coverage,
+                "hr_seconds": {str(k): v for k, v in result.hr_seconds.items()},
+                "steady": result.steady, "efficiency": result.efficiency,
+                "decoupling_pct": result.decoupling_pct, "steady_speed_mps": result.steady_speed_mps,
+                "steady_hr": result.steady_hr,
+            })
+        store.save_derived(rows)
+        store.commit()
+
+
 class _WindowShrunk(Exception):
     """Garmin rejected a window as too wide. It has been narrowed, so try again."""
 
@@ -268,26 +291,7 @@ class _Run:
         self.store.commit()
 
     def derive_activities(self) -> None:
-        """Read each new FIT file once and keep the numbers the metrics need."""
-        while True:
-            pending = self.store.activity_files_to_derive(DERIVE_VERSION, 20)
-            if not pending:
-                return
-            rows = []
-            for item in pending:
-                fit = unzip_fit(bytes(item["content"]))
-                samples, _ = read_samples(fit) if fit else ([], None)
-                result = derive(samples, item["discipline"], item["type_key"])
-                rows.append({
-                    "activity_id": item["activity_id"], "derive_version": DERIVE_VERSION,
-                    "samples": result.samples, "hr_coverage": result.hr_coverage,
-                    "hr_seconds": {str(k): v for k, v in result.hr_seconds.items()},
-                    "steady": result.steady, "efficiency": result.efficiency,
-                    "decoupling_pct": result.decoupling_pct, "steady_speed_mps": result.steady_speed_mps,
-                    "steady_hr": result.steady_hr,
-                })
-            self.store.save_derived(rows)
-            self.store.commit()
+        derive_pending(self.store)
 
     def profile(self) -> None:
         cursor = self.store.get_cursor(PROFILE)

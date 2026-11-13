@@ -1,6 +1,6 @@
 # Creed
 
-**A triathlon dashboard built from your own Garmin data.** It installs on your phone like an app, signs you in with Face ID, and counts down to your race.
+**A triathlon dashboard built from your own watch's data:** Garmin directly, or COROS, Polar, Suunto, Wahoo and more through intervals.icu. It installs on your phone like an app, signs you in with Face ID, and counts down to your race.
 
 **Homepage:** https://creed-garmin.vercel.app/welcome/
 
@@ -50,20 +50,24 @@ Jump to [the step-by-step guide](#step-by-step-setup) below.
 
 ### What you need
 
-- A Garmin watch that syncs to Garmin Connect
+- A Garmin watch that syncs to Garmin Connect, or any watch that syncs to [intervals.icu](https://intervals.icu) (COROS, Polar, Suunto, Wahoo, Amazfit and more)
 - An iPhone (Android should work too, but hasn't been tried)
 - Free accounts on [GitHub](https://github.com), [Supabase](https://supabase.com) and [Vercel](https://vercel.com)
 - On your computer: [Python](https://www.python.org/downloads/) 3.12 or newer, [Node.js](https://nodejs.org) 22, and [Git](https://git-scm.com)
 
 The commands are for Windows. On macOS or Linux, use `.venv/bin/python` wherever you see `.venv/Scripts/python`.
 
-> **Keep your secrets secret.** You'll make a Garmin key, a database password, a setup secret, a cron secret and a recovery code. Put them only in your own terminal, your `.env` file, Vercel, GitHub Secrets and a password manager. Never commit `.env`.
+> **Keep your secrets secret.** You'll make a Garmin or intervals.icu key, a database password, a setup secret, a cron secret and a recovery code. Put them only in your own terminal, your `.env` file, Vercel, GitHub Secrets and a password manager. Never commit `.env`.
 
 ### 1. Get the code
 
 Fork this repo on GitHub, then clone your fork and open a terminal in its folder. Run every command from that folder.
 
-### 2. Save your Garmin key
+### 2. Connect your watch
+
+Creed reads from one of two places. Pick the one your watch already syncs to.
+
+**Garmin:** read directly from Garmin Connect.
 
 1. Create a key on the [Garmin Connect key page](https://connect.garmin.com/app/settings/personalApiToken). Garmin shows it only once. Note the expiry date you choose.
 2. Save it. What you type stays hidden, and the key is stored in your user folder, outside this project:
@@ -72,11 +76,26 @@ Fork this repo on GitHub, then clone your fork and open a terminal in its folder
    python tools/garmin_probe.py --save-key
    ```
 
+**COROS, Polar, Suunto, Wahoo, Amazfit and others:** read through [intervals.icu](https://intervals.icu), which is free.
+
+1. Create an intervals.icu account and connect your watch's app on its **Settings** page. Give it a few minutes to bring in your history.
+2. On the same page, scroll to **Developer Settings** and copy your **API key**. It doesn't expire.
+3. You'll put it in `.env` in the next step, with `CREED_DATA_SOURCE=intervals` and `INTERVALS_API_KEY=` set to your key.
+
+What you get through intervals.icu: workouts with route maps and heart rate, sleep length and score, resting heart rate, HRV and steps. Body Battery, stress, sleep stages and Garmin's training effects are Garmin's own, so they only appear with the Garmin option. Activities that reached intervals.icu from Strava can't be passed on to other apps, so connect your watch to intervals.icu directly.
+
+> **Wear a Garmin? Use the Garmin option.** Garmin is limiting what intervals.icu can pass on to other apps, so Garmin data reached through intervals.icu may stop arriving.
+
 ### 3. Create the database
 
 1. On Supabase, create a new project in the region nearest you. Keep the database password somewhere safe.
 2. Choose **Connect**, then the **Direct** tab, then **Transaction pooler**. Copy that connection string and put your password in it.
 3. Copy `.env.example` to `.env`, and set `DATABASE_URL` in it to that string.
+4. Using intervals.icu? Also set `CREED_DATA_SOURCE=intervals` and `INTERVALS_API_KEY` in `.env`, then check the key works. It prints only counts:
+
+   ```bash
+   python tools/intervals_check.py
+   ```
 
 ### 4. Copy your data in
 
@@ -115,7 +134,9 @@ If the sync says **"History is still being copied"**, run it again until it does
    | Name | Value |
    |---|---|
    | `DATABASE_URL` | Your Supabase Transaction pooler string |
-   | `GARMIN_PERSONAL_API_KEY` | Your Garmin key |
+   | `GARMIN_PERSONAL_API_KEY` | Your Garmin key (Garmin only) |
+   | `CREED_DATA_SOURCE` | `intervals` (intervals.icu only; leave it out for Garmin) |
+   | `INTERVALS_API_KEY` | Your intervals.icu API key (intervals.icu only) |
    | `CREED_ORIGIN` | Your address from step 3, starting with `https://` and with no slash at the end |
    | `CREED_SETUP_SECRET` | Your setup secret |
    | `CRON_SECRET` | Your cron secret |
@@ -139,11 +160,11 @@ The server runs in Mumbai (`bom1` in `vercel.json`). If your database is elsewhe
    | `CREED_URL` | Your address, like `https://<name>.vercel.app` |
    | `CRON_SECRET` | Your cron secret, the same as in Vercel |
 2. GitHub turns schedules off on forks, so open the **Actions** tab and enable workflows.
-3. Choose **Sync Garmin data**, then **Run workflow**, to check it works.
+3. Choose **Sync training data**, then **Run workflow**, to check it works.
 
 **You're done.** Creed now syncs on its own. Change the race date, time zone and heart-rate settings in **Settings**, behind the gear on Today.
 
-### Optional: import your whole Garmin history
+### Optional: import your whole Garmin history (Garmin only)
 
 Garmin's API only goes back so far. Request your data from Garmin's **Export Your Data** page in your account settings; Garmin emails a link to a zip within a few days. Put the zip, unopened, in a folder called `exports` in this project (git ignores it), then run:
 
@@ -172,7 +193,8 @@ Notifications go out with the scheduled sync, so within about half an hour of th
 | `/api/auth/status` shows an error | Check `DATABASE_URL` in Vercel, then redeploy. |
 | Signing in says to set `CREED_ORIGIN` | It's missing from Vercel, or you didn't redeploy after adding it. |
 | The tab bar is cut off, or the top of the screen is blurred | Delete Creed from the home screen and add it again. Your passkey is kept in iCloud, so you just sign in. |
-| The sync time on Today turns red | The last sync failed. "Garmin key problem" usually means the key has expired. |
+| The sync time on Today turns red | The last sync failed. "Garmin key problem" usually means the key has expired. "intervals.icu key problem" means the key was regenerated or mistyped. |
+| Some intervals.icu activities are missing | Ones that came to intervals.icu from Strava can't be shared with other apps. Connect your watch to intervals.icu directly. |
 | The Actions run failed | Check `CREED_URL` and `CRON_SECRET` in GitHub match your address and Vercel's `CRON_SECRET`. |
 | Something breaks after you update your copy | Run `.venv/Scripts/python -m creed.db.migrate` again. It only applies what's new. |
 
@@ -184,9 +206,10 @@ Notifications go out with the scheduled sync, so within about half an hour of th
 - **Every 30 minutes:** GitHub Actions asks your app to sync. GitHub can run this late when it's busy, and may occasionally skip one.
 - **Once a day:** Vercel does the same, between 5:30 and 6:29 AM India time, as a backup. To suit your time zone, change `crons` in `vercel.json`. It's in UTC, and the free plan allows one run a day, at some point within the hour you choose.
 - **Whenever you want:** tap the sync time at the top of Today. It refuses to start a second sync while one is running.
-- **If the 30-minute sync stops:** GitHub turns schedules off on public repositories after 60 days with no repository activity. The daily sync carries on. To turn it back on, go to **Actions**, choose **Sync Garmin data**, and enable it.
+- **If the 30-minute sync stops:** GitHub turns schedules off on public repositories after 60 days with no repository activity. The daily sync carries on. To turn it back on, go to **Actions**, choose **Sync training data**, and enable it.
 - **The logs are public.** Anyone can read Actions logs on a public repository, so the workflow prints only whether the sync worked. The reason for a failure is recorded in the app.
-- **Your Garmin key expires.** Make a new one before the date you noted and replace `GARMIN_PERSONAL_API_KEY` in Vercel, then redeploy.
+- **Your Garmin key expires.** Make a new one before the date you noted and replace `GARMIN_PERSONAL_API_KEY` in Vercel, then redeploy. An intervals.icu key doesn't expire.
+- **intervals.icu:** each sync reads the last few days of wellness and activities, then walks back through your history, and fetches each activity's FIT file for its map and heart rate. Its rows are stored with the source `intervals`, beside where Garmin's would go, so every screen works the same way.
 
 </details>
 
@@ -213,7 +236,7 @@ Creed signs you in with a passkey, which on an iPhone means Face ID. A passkey i
 - **The homepage's tap count.** The public homepage at `/welcome/` counts taps on its "Try Creed now" button. It's a single total, kept in `app_setting`, with nothing about who tapped, and it's the only number the API shares without a session.
 - **Nothing is filled in.** A day with no data has no row. Values that fail validation are kept but flagged, and metrics leave them out.
 - **Dates:** sleep and HRV belong to the day you woke up, as on Garmin. Times are stored in UTC along with your local offset.
-- **Sources:** each value records whether it came from Garmin's API, the account export or a manual entry, so those can be added without changing the database.
+- **Sources:** each value records whether it came from Garmin's API, intervals.icu, the account export or a manual entry. Values are tagged on screen with where they came from.
 - **GPS stays in the file.** Positions are only read from an activity's file when you open its map, and they're never saved anywhere else. [OpenFreeMap](https://openfreemap.org) supplies the map, with no key and no account, so opening one shows them which area you're looking at.
 
 </details>
@@ -278,7 +301,7 @@ The public homepage lives in `web/welcome/` and is built alongside the app; the 
 
 - **A full Data Quality page.**
 - **Themes.**
-- **A hosted version for everyone.** Later, I plan to host Creed on my own server so that anyone can create an account with an ID and password, connect their own Garmin, and use it without setting anything up. Connecting other people's Garmin accounts needs Garmin's approval through its Connect Developer Program, because the Personal API this version uses is only for your own data. Creed will never ask for your Garmin password. Until then, follow [Set up your own Creed](#set-up-your-own-creed).
+- **A hosted version for everyone.** Later, I plan to host Creed on my own server so that anyone can create an account and connect their watch without setting anything up: other watches through intervals.icu's sign-in approval, and Garmin once Garmin approves Creed for its Connect Developer Program, because the Personal API this version uses is only for your own data. Creed will never ask for your password. Until then, follow [Set up your own Creed](#set-up-your-own-creed).
 
 ## Never commit
 
@@ -286,9 +309,9 @@ Keep secrets, Garmin keys and tokens, FIT files, personal data and logos out of 
 
 ## Unofficial project
 
-Creed is an independent project. It is not affiliated with, endorsed by or sponsored by Garmin or The IRONMAN Group. Garmin, IRONMAN and related names are trademarks of their respective owners.
+Creed is an independent project. It is not affiliated with, endorsed by or sponsored by Garmin, intervals.icu or The IRONMAN Group. Garmin, IRONMAN and related names are trademarks of their respective owners.
 
-Each person who runs their own copy uses their own Garmin Personal API key and is responsible for following Garmin's terms. Garmin describes the Personal API as being for an individual's own data, not for commercial applications serving multiple users.
+Each person who runs their own copy uses their own Garmin Personal API key or intervals.icu API key, and is responsible for following Garmin's and intervals.icu's terms. Garmin describes the Personal API as being for an individual's own data, not for commercial applications serving multiple users.
 
 ## License
 

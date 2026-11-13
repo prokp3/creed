@@ -183,7 +183,7 @@
         </label>
         <button type="button" class="list-row link pressable" onclick={ontargets}><span>Targets for training and rest days</span><span class="note">Edit</span></button>
       </div>
-      <p class="note">A day with a Garmin workout this long uses training day targets. Others are rest days until a workout syncs, unless you choose.</p>
+      <p class="note">A day with a synced workout this long uses training day targets. Others are rest days until a workout syncs, unless you choose.</p>
     </section>
 
     <section class="stack">

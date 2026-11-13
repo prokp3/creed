@@ -1,7 +1,7 @@
 [project]
 name = "creed"
 version = "0.1.0"
-description = "A personal triathlon dashboard built from your own Garmin data."
+description = "A personal triathlon dashboard built from your own Garmin or intervals.icu data."
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.12"

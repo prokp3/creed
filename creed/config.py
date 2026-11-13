@@ -31,6 +31,27 @@ def database_url() -> str:
     return url
 
 
+# Where the training data comes from. Garmin is read directly. Everything else (COROS, Polar, Suunto, Wahoo and more)
+# arrives through intervals.icu, which those watches already sync to.
+DATA_SOURCE_ENV_VAR = "CREED_DATA_SOURCE"
+GARMIN = "garmin"
+INTERVALS = "intervals"
+SOURCE_LABELS = {GARMIN: "Garmin", INTERVALS: "intervals.icu"}
+
+
+def data_source() -> str:
+    """garmin unless CREED_DATA_SOURCE says intervals. A typo stops the app rather than quietly syncing the wrong place."""
+    value = os.environ.get(DATA_SOURCE_ENV_VAR, "").strip().lower() or GARMIN
+    if value not in SOURCE_LABELS:
+        raise RuntimeError(f"{DATA_SOURCE_ENV_VAR} must be garmin or intervals, not {value!r}.")
+    return value
+
+
+def source_label() -> str:
+    """How screens name the data source, such as on the tag beside a value: Garmin or intervals.icu."""
+    return SOURCE_LABELS[data_source()]
+
+
 def local_today(tz_name: str | None = None) -> date:
     tz = ZoneInfo(tz_name or os.environ.get("CREED_TIMEZONE") or DEFAULT_TIMEZONE)
     return datetime.now(timezone.utc).astimezone(tz).date()

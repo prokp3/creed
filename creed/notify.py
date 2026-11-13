@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 
 import psycopg
 
-from creed import alerts, auth, push
+from creed import alerts, auth, config, push
 from creed import settings as app_settings
 from creed.db import food, reads
 from creed.db import push as db_push
@@ -155,11 +155,13 @@ def due_training_notes(conn: psycopg.Connection, owner: str, now: datetime,
         start = alerts.weekly_due(local, saved.weekly_notify_time)
         if start is not None and not db_push.claimed(conn, owner, "weekly", [start.isoformat()]):
             notes.append(_weekly_note(conn, owner, ctx, saved, start))
-    if "key_expiring" in kinds and saved.notify_key_expiring and daytime:
+    # intervals.icu keys never run out, so only a Garmin key is watched.
+    if "key_expiring" in kinds and saved.notify_key_expiring and daytime and config.data_source() == config.GARMIN:
         expires = date.fromisoformat(saved.garmin_key_expires) if saved.garmin_key_expires else None
         notes.append(alerts.key_expiring(expires, ctx.today))
     if "sync_failed" in kinds and saved.notify_sync_failed and daytime:
-        notes.append(alerts.sync_failed(reads.finished_runs(conn), reads.last_good_run(conn), tz))
+        notes.append(alerts.sync_failed(reads.finished_runs(conn), reads.last_good_run(conn), tz,
+                                        config.source_label()))
     return [n for n in notes if n is not None], workouts
 
 

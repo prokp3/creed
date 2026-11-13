@@ -101,7 +101,7 @@
     if (!view.loaded) return '';
     if (view.dayType.how === 'unknown') return 'Offline: decided once back online';
     if (view.dayType.how === 'override') return 'Set by you';
-    if (view.dayType.how === 'garmin') return 'Workout synced from Garmin';
+    if (view.dayType.how === 'garmin') return 'Workout synced from your watch';
     return view.isToday ? 'Until a workout syncs' : 'No workout synced';
   });
 

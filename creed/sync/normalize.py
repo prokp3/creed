@@ -274,28 +274,7 @@ def activity(row: dict) -> tuple[dict[str, Any], list[Flag]]:
     speed = _number(row.get("averageSpeed"))
     avg_hr = _number(row.get("averageHR"))
     max_hr = _number(row.get("maxHR"))
-
-    flags: list[Flag] = []
-    quality = "ok"
-    if duration is None or duration <= 0:
-        flags.append(Flag("no_duration", "problem", "Activity has no duration."))
-        quality = "flagged"
-    elif duration < VERY_SHORT_ACTIVITY_SECONDS:
-        flags.append(Flag("very_short", "info", f"Only {duration:.0f} s long."))
-    for name, value in (("average HR", avg_hr), ("max HR", max_hr)):
-        if value is not None and not 25 <= value <= 240:
-            flags.append(Flag("impossible_hr", "problem", f"{name} was {value:g} bpm."))
-            quality = "flagged"
-    if avg_hr is not None and max_hr is not None and avg_hr > max_hr:
-        flags.append(Flag("hr_order", "problem", f"Average HR {avg_hr:g} is above max HR {max_hr:g}."))
-        quality = "flagged"
-    if distance is not None and distance < 0:
-        flags.append(Flag("impossible_distance", "problem", f"Distance was {distance:g} m."))
-        quality = "flagged"
-    limit = MAX_SPEED_MPS.get(discipline)
-    if limit is not None and speed is not None and speed > limit:
-        flags.append(Flag("impossible_speed", "problem", f"Average speed was {speed:.1f} m/s for a {discipline}."))
-        quality = "flagged"
+    flags, quality = activity_checks(discipline, duration, distance, speed, avg_hr, max_hr)
 
     start_gmt = row.get("startTimeGMT")
     start_local = row.get("startTimeLocal")
@@ -331,6 +310,33 @@ def activity(row: dict) -> tuple[dict[str, Any], list[Flag]]:
         "is_manual": manual,
         "quality": quality,
     }, flags
+
+
+def activity_checks(discipline: str, duration: float | None, distance: float | None, speed: float | None,
+                    avg_hr: float | None, max_hr: float | None) -> tuple[list[Flag], str]:
+    """The same checks for an activity from any source. Returns its flags and its quality."""
+    flags: list[Flag] = []
+    quality = "ok"
+    if duration is None or duration <= 0:
+        flags.append(Flag("no_duration", "problem", "Activity has no duration."))
+        quality = "flagged"
+    elif duration < VERY_SHORT_ACTIVITY_SECONDS:
+        flags.append(Flag("very_short", "info", f"Only {duration:.0f} s long."))
+    for name, value in (("average HR", avg_hr), ("max HR", max_hr)):
+        if value is not None and not 25 <= value <= 240:
+            flags.append(Flag("impossible_hr", "problem", f"{name} was {value:g} bpm."))
+            quality = "flagged"
+    if avg_hr is not None and max_hr is not None and avg_hr > max_hr:
+        flags.append(Flag("hr_order", "problem", f"Average HR {avg_hr:g} is above max HR {max_hr:g}."))
+        quality = "flagged"
+    if distance is not None and distance < 0:
+        flags.append(Flag("impossible_distance", "problem", f"Distance was {distance:g} m."))
+        quality = "flagged"
+    limit = MAX_SPEED_MPS.get(discipline)
+    if limit is not None and speed is not None and speed > limit:
+        flags.append(Flag("impossible_speed", "problem", f"Average speed was {speed:.1f} m/s for a {discipline}."))
+        quality = "flagged"
+    return flags, quality
 
 
 def fit_flags(discipline: str, fit: dict[str, Any]) -> list[Flag]:

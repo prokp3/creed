@@ -18,6 +18,8 @@
   let savedTimer;
 
   const s = $derived(res.data);
+  // intervals.icu keys never expire, so there's no expiry date to keep or warn about.
+  const intervals = $derived(s?.data_source?.key === 'intervals');
   const supported = pushSupport();
   let subscribed = $state(false);
   let pushBusy = $state(false);
@@ -224,25 +226,40 @@
         {@render toggle('notify_load_spike', 'Load spike warning')}
         {@render toggle('notify_weekly', 'Weekly summary on Sundays')}
         {#if s.notify_weekly}{@render clock('weekly_notify_time', 'Weekly summary')}{/if}
-        {@render toggle('notify_key_expiring', 'Garmin key expiring soon')}
+        {#if !intervals}{@render toggle('notify_key_expiring', 'Garmin key expiring soon')}{/if}
         {@render toggle('notify_sync_failed', 'Sync failed')}
       </div>
       <p class="note">Creed checks about every 30 minutes, so notifications can be up to half an hour late. Recovery waits for last night's HRV, and is skipped if there's no score within 3 hours of your time. A load spike means your last week's load is at least 1.5 times your six-week average. Apart from Recovery and the weekly summary, nothing is sent between 10 PM and 7 AM.</p>
       <p class="note">Recaps and summaries include your numbers. To hide them on the lock screen, set iPhone Settings › Notifications › Show Previews to When Unlocked.</p>
     </section>
 
-    <section class="gutter stack">
-      <h2 class="section-heading">Garmin key</h2>
-      <div class="list">
-        <div class="list-block">
-          <div class="list-inner">
-            <label for="key-expiry">Expires on</label>
-            <input id="key-expiry" class="field" type="date" value={s.garmin_key_expires ?? ''} aria-describedby="key-note" onchange={(e) => change({ garmin_key_expires: e.currentTarget.value || null })} />
+    {#if intervals}
+      <section class="gutter stack">
+        <h2 class="section-heading">Data source</h2>
+        <div class="list">
+          <div class="list-block">
+            <div class="list-inner">
+              <span>Synced from</span>
+              <span class="note">intervals.icu</span>
+            </div>
+            <p class="note">Creed reads your watch's data from intervals.icu with your API key, which doesn't expire. Body Battery, stress and Garmin's training effects are Garmin's own, so they don't appear.</p>
           </div>
-          <p id="key-note" class="note">Garmin doesn't share this date with the app, so enter the one from your key page.</p>
         </div>
-      </div>
-    </section>
+      </section>
+    {:else}
+      <section class="gutter stack">
+        <h2 class="section-heading">Garmin key</h2>
+        <div class="list">
+          <div class="list-block">
+            <div class="list-inner">
+              <label for="key-expiry">Expires on</label>
+              <input id="key-expiry" class="field" type="date" value={s.garmin_key_expires ?? ''} aria-describedby="key-note" onchange={(e) => change({ garmin_key_expires: e.currentTarget.value || null })} />
+            </div>
+            <p id="key-note" class="note">Garmin doesn't share this date with the app, so enter the one from your key page.</p>
+          </div>
+        </div>
+      </section>
+    {/if}
 
     <SignInSettings {active} {freshness} timeZone={s.timezone} />
   {/if}

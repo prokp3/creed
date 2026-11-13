@@ -100,6 +100,7 @@ def day_screen(session: Session, conn: Conn, date_: Annotated[str | None, Query(
             day=day, today=today, entries=food.entries_between(conn, user, day, day),
             nutrients=food.list_nutrients(conn, user), day_type=kind, threshold_minutes=threshold,
             target_set=targets.targets_for(day, kind.day_type, sets), burned_kcal=burned,
+            source_tag=config.source_label(),
         )
 
 

@@ -12,12 +12,12 @@
   let { active, freshness } = $props();
 
   const RANGES = [7, 30, 90, 180];
-  const SECTIONS = [
+  const SECTION_LIST = [
     ['form', 'Form'],
     ['recovery', 'Recovery'],
     ['sleep', 'Sleep'],
     ['load', 'Load'],
-    ['garmin', 'Garmin'],
+    ['garmin', null],
     ['aerobic', 'Aerobic efficiency'],
     ['data', 'Data quality'],
   ];
@@ -31,6 +31,9 @@
   let jump = $state('form');
   const res = resource(() => `/api/in-depth?days=${days}`);
   const data = $derived(res.data);
+  // Where the data comes from: Garmin, or intervals.icu for other watches. The server names it.
+  const source = $derived(data?.garmin.tag ?? 'Garmin');
+  const sections = $derived(SECTION_LIST.map(([id, label]) => [id, label ?? source]));
 
   $effect(() => {
     freshness;
@@ -131,7 +134,7 @@
     <label for="jump-to" class="tile-label">Jump to</label>
     <div class="select-wrap">
       <select id="jump-to" value={jump} onchange={jumpTo}>
-        {#each SECTIONS as [id, label] (id)}
+        {#each sections as [id, label] (id)}
           <option value={id}>{label}</option>
         {/each}
       </select>
@@ -203,15 +206,15 @@
         </div>
         <WhyPanel why={data.recovery.why} confidence={data.recovery.confidence} />
         <div class="card stack">
-          <div class="chart-head"><h3 class="tile-label">Overnight HRV, ms</h3><span class="tag">Garmin{hrvBand ? ' · shaded: balanced range' : ''}</span></div>
+          <div class="chart-head"><h3 class="tile-label">Overnight HRV, ms</h3><span class="tag">{source}{hrvBand ? ' · shaded: balanced range' : ''}</span></div>
           <LineChart label="Overnight HRV. Gaps are nights with no record." dates={dates(data.recovery.hrv)} series={[{ name: 'HRV', color: 'var(--ink)', values: values(data.recovery.hrv) }]} band={hrvBand} height={120} />
         </div>
         <div class="card stack">
-          <div class="chart-head"><h3 class="tile-label">Resting HR, bpm</h3><span class="tag">Garmin</span></div>
+          <div class="chart-head"><h3 class="tile-label">Resting HR, bpm</h3><span class="tag">{source}</span></div>
           <LineChart label="Resting heart rate. Gaps are days with no record." dates={dates(data.recovery.resting_hr)} series={[{ name: 'Resting HR', color: 'var(--ink)', values: values(data.recovery.resting_hr) }]} step={5} height={120} />
         </div>
         <div class="card stack">
-          <div class="chart-head"><h3 class="tile-label">Respiration in sleep, /min</h3><span class="tag">Garmin</span></div>
+          <div class="chart-head"><h3 class="tile-label">Respiration in sleep, /min</h3><span class="tag">{source}</span></div>
           <LineChart label="Respiration during sleep. Gaps are nights with no record." dates={dates(data.recovery.respiration)} series={[{ name: 'Respiration', color: 'var(--ink)', values: values(data.recovery.respiration) }]} step={2} format={(v) => v.toFixed(0)} height={120} />
         </div>
       </section>
@@ -294,7 +297,7 @@
       </section>
 
       <section id="garmin" class="gutter stack">
-        <h2 class="page-heading">Garmin</h2>
+        <h2 class="page-heading">{source}</h2>
         {#if garminTiles.length}
           <div class="grid-2">
             {#each garminTiles as [label, value, show, note] (label)}
@@ -306,7 +309,7 @@
             {/each}
           </div>
         {:else}
-          <p class="note">Nothing from Garmin in the last two days.</p>
+          <p class="note">Nothing from {source} in the last two days.</p>
         {/if}
       </section>
 

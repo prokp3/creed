@@ -11,7 +11,7 @@ from typing import Any
 from creed.garmin.fit import TrackPoint
 
 MAP_DISCIPLINES = {"run", "bike"}
-INDOOR_TYPES = {"treadmill_running", "indoor_running", "indoor_cycling", "virtual_ride"}
+INDOOR_TYPES = {"treadmill_running", "indoor_running", "indoor_cycling", "virtual_ride", "virtual_run"}
 
 EARTH_RADIUS_M = 6_371_000
 MAX_GAP_SECONDS = 30  # Longer than this between samples means a pause or lost signal.

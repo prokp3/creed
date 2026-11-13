@@ -1,4 +1,4 @@
-name: Sync Garmin data
+name: Sync training data
 
 on:
   schedule:

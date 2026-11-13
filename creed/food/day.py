@@ -52,7 +52,7 @@ def rings(nutrients: Sequence[Mapping[str, Any]], totals: nutrition.Totals,
 
 def day_view(*, day: date, today: date, entries: Sequence[Mapping[str, Any]], nutrients: Sequence[Mapping[str, Any]],
              day_type: DayType, threshold_minutes: float, target_set: TargetSet | None,
-             burned_kcal: float | None) -> dict[str, Any]:
+             burned_kcal: float | None, source_tag: str = "Garmin") -> dict[str, Any]:
     ids = [n["id"] for n in nutrients]
     totals = nutrition.totals(entries, ids)
     eaten = totals.values.get("kcal", 0.0)
@@ -67,7 +67,7 @@ def day_view(*, day: date, today: date, entries: Sequence[Mapping[str, Any]], nu
         "rings": rings(nutrients, totals, target_set),
         "meals": meals(entries),
         "balance": {
-            "tag": "Garmin",
+            "tag": source_tag,
             "estimate": True,
             # Today isn't over, so its burn is only what Garmin has counted so far.
             "so_far": day == today,

@@ -25,8 +25,13 @@ from creed.db.store import Store
 from creed.garmin import fit, track
 from creed.garmin.client import BASE_URL_ENV_VAR, DEFAULT_BASE_URL, AuthFailed, Client
 from creed.garmin.keys import resolve_api_key
+from creed.intervals import api as intervals_api
+from creed.intervals.client import BASE_URL_ENV_VAR as INTERVALS_BASE_URL_ENV_VAR
+from creed.intervals.client import DEFAULT_BASE_URL as INTERVALS_DEFAULT_BASE_URL
+from creed.intervals.client import Client as IntervalsClient
 from creed.metrics import compute_all, race
 from creed.sync.engine import TOKEN_SECRET, run_sync
+from creed.sync.intervals import run_intervals_sync
 
 config.load_dotenv()
 
@@ -35,6 +40,8 @@ app = FastAPI(title="Creed", docs_url=None, redoc_url=None, openapi_url=None)
 ISSUE_LOOKBACK_DAYS = 7
 SYNC_TIME_BUDGET_SECONDS = 240
 SYNC_MAX_REQUESTS = 150
+# intervals.icu allows 2,500 requests per 15 minutes, and most of a run's requests are activity files.
+INTERVALS_MAX_REQUESTS = 400
 # A run that started this recently and hasn't finished is still going. Longer than any run can last.
 SYNC_RUNNING_MINUTES = 6
 GARMIN_DAILY = ["body_battery_latest", "body_battery_max", "body_battery_min", "body_battery_charged",
@@ -214,7 +221,7 @@ def today_screen(_: OwnerSession, conn: Conn) -> dict[str, Any]:
     latest = _latest(series, ctx.today)
     last_night = next((n for n in ctx.sleep if n.day == ctx.today), None)
     garmin = {
-        "tag": "Garmin",
+        "tag": config.source_label(),
         "body_battery": latest.get("body_battery_latest"),
         "stress": latest.get("stress_avg"),
         "sleep_score": last_night.score if last_night else None,
@@ -321,6 +328,8 @@ async def put_settings(request: Request, session: OwnerSession, conn: Conn) -> d
 
 
 def _sync(conn: psycopg.Connection, trigger: str) -> dict[str, Any]:
+    if config.data_source() == config.INTERVALS:
+        return _sync_intervals(conn, trigger)
     saved = app_settings.load(conn)
     store = Store(conn)
     try:
@@ -336,6 +345,23 @@ def _sync(conn: psycopg.Connection, trigger: str) -> dict[str, Any]:
         on_token=lambda token, expires: store.set_secret(TOKEN_SECRET, token, expires),
     )
     result = run_sync(store, client, today=_today(saved.timezone), trigger=trigger)
+    return {"status": result.status, "requests": result.requests, "records": result.records,
+            "backfill_pending": result.backfill_pending, "message": result.message}
+
+
+def _sync_intervals(conn: psycopg.Connection, trigger: str) -> dict[str, Any]:
+    saved = app_settings.load(conn)
+    try:
+        client = IntervalsClient(
+            os.environ.get(INTERVALS_BASE_URL_ENV_VAR, INTERVALS_DEFAULT_BASE_URL),
+            intervals_api.resolve_api_key(),
+            max_requests=INTERVALS_MAX_REQUESTS,
+            deadline=time.monotonic() + SYNC_TIME_BUDGET_SECONDS,
+        )
+        athlete = intervals_api.athlete_id()
+    except AuthFailed as exc:
+        return {"status": "auth_failed", "message": str(exc)}
+    result = run_intervals_sync(Store(conn), client, athlete=athlete, today=_today(saved.timezone), trigger=trigger)
     return {"status": result.status, "requests": result.requests, "records": result.records,
             "backfill_pending": result.backfill_pending, "message": result.message}
 

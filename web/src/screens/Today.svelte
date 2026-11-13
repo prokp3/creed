@@ -30,6 +30,8 @@
   const DISCIPLINES = ['run', 'bike', 'swim'];
   const res = resource(() => '/api/today');
   const data = $derived(res.data);
+  // Where the data comes from: Garmin, or intervals.icu for other watches. The server names it.
+  const source = $derived(data?.garmin.tag ?? 'Garmin');
 
   $effect(() => {
     freshness;
@@ -40,7 +42,7 @@
   let syncing = $state(false);
   let syncProblem = $state(null);
 
-  // Pulls from Garmin straight away rather than waiting for the next scheduled sync.
+  // Pulls from the source straight away rather than waiting for the next scheduled sync.
   async function syncNow() {
     if (syncing) return;
     syncing = true;
@@ -74,7 +76,7 @@
     const run = data.sync.latest_run;
     const good = data.sync.last_good_finish;
     if (run && ['failed', 'auth_failed'].includes(run.status)) {
-      return { text: run.status === 'auth_failed' ? 'Garmin key problem' : 'Sync failed', attention: true };
+      return { text: run.status === 'auth_failed' ? `${source} key problem` : 'Sync failed', attention: true };
     }
     if (!good) return { text: 'Not synced yet', attention: false };
     const day = zonedDate(good, zone);
@@ -118,7 +120,7 @@
 <Screen {active}>
   <div class="top gutter">
     <h1 class="page-heading">{data ? dayHeading(data.today) : 'Today'}</h1>
-    <button class="sync pressable" class:attention={syncText.attention} disabled={syncing} onclick={syncNow} aria-label={syncing ? 'Syncing with Garmin' : `${syncText.text}. Sync now`}>
+    <button class="sync pressable" class:attention={syncText.attention} disabled={syncing} onclick={syncNow} aria-label={syncing ? `Syncing with ${source}` : `${syncText.text}. Sync now`}>
       <span class="spin" class:on={syncing}><Icon name="refresh" size={14} stroke={2.2} /></span>
       {syncing ? 'Syncing…' : syncText.text}
     </button>
@@ -139,7 +141,7 @@
           sub={text.sub}
           fraction={ring.fraction}
           label={ring.label}
-          tag={ring.tag === 'Garmin' ? 'Garmin' : 'COMPUTED'}
+          tag={ring.tag === 'Computed' ? 'COMPUTED' : ring.tag}
           attention={ring.attention}
           full={ring.key === 'resting_hr'}
         />
@@ -234,7 +236,7 @@
 
     {#if garminTiles.length}
       <section class="gutter stack">
-        <h2 class="section-heading">Garmin</h2>
+        <h2 class="section-heading">{source}</h2>
         <div class="grid-2">
           {#each garminTiles as tile (tile.label)}
             <div class="tile">

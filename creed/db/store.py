@@ -151,12 +151,14 @@ class Store:
             values["fit_status"] = "none"  # A manual entry has no recording to download.
         return values
 
-    def activities_needing_file(self, limit: int, max_attempts: int = 3) -> list[dict[str, Any]]:
+    def activities_needing_file(self, limit: int, max_attempts: int = 3, *, intervals: bool = False) -> list[dict[str, Any]]:
+        """Each source fetches only its own files: intervals.icu's rows, or everything else (Garmin's IDs)."""
         return self.conn.execute(
             "select activity_id, discipline, fit_attempts from activity "
-            "where fit_status = 'pending' or (fit_status = 'failed' and fit_attempts < %s) "
+            "where (fit_status = 'pending' or (fit_status = 'failed' and fit_attempts < %s)) "
+            "and (source = 'intervals') = %s "
             "order by start_time desc nulls last limit %s",
-            (max_attempts, limit),
+            (max_attempts, intervals, limit),
         ).fetchall()
 
     def save_activity_file(self, activity_id: int, content: bytes, sha256: str) -> None:
@@ -224,12 +226,12 @@ class Store:
     def save_cursor(self, cursor: Cursor) -> None:
         self._write_rows("sync_cursor", [asdict(cursor)], ("dataset",))
 
-    def backfill_pending(self, datasets: Iterable[str]) -> bool:
+    def backfill_pending(self, datasets: Iterable[str], *, intervals: bool = False) -> bool:
         names = list(datasets)
         done = self.conn.execute(
             "select count(*) as n from sync_cursor where dataset = any(%s) and backfill_done", (names,)
         ).fetchone()["n"]
-        return done < len(names) or bool(self.activities_needing_file(1))
+        return done < len(names) or bool(self.activities_needing_file(1, intervals=intervals))
 
     def close_abandoned_runs(self, older_than_minutes: int = 15) -> int:
         """A run killed from outside, such as by a serverless time limit, can't record its own end."""
