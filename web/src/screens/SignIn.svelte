@@ -127,6 +127,8 @@
 </script>
 
 <main class="page" data-no-haptics>
+  <!-- Visitors who land here without an account can read what Creed is on the public homepage. -->
+  <a class="home-link pressable" href="/welcome/">Homepage</a>
   <div class="brand">
     <img src="/icons/icon-192.png" alt="" width="72" height="72" />
     <h1>Creed</h1>
@@ -198,6 +200,18 @@
     flex-direction: column;
     overflow-y: auto;
     padding: calc(var(--safe-top) + 16px) var(--gutter) calc(var(--safe-bottom) + 16px);
+  }
+
+  .home-link {
+    align-self: flex-end;
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 18px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--ink);
+    font: 600 15px/1 var(--body);
   }
 
   .brand {
