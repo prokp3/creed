@@ -1,0 +1,8 @@
+/* The Try Creed page, on top of the homepage and feedback page looks. */
+.skip {
+  min-height: 44px; padding: 0 16px; gap: 8px;
+  border: 1px solid var(--ink); border-radius: 999px;
+  color: var(--ink); font-size: 14px; font-weight: 600; background: rgba(255, 255, 255, .6);
+}
+.skip:hover { color: #fff; background: var(--ink); }
+.kinds + .field, .field + .kinds { margin-top: 0; }

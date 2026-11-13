@@ -6,10 +6,11 @@ the form's question ids, which are public (they're in the form's own page), not 
 from __future__ import annotations
 
 import re
-import urllib.error
-import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+
+from creed import forms
+from creed.forms import NotDelivered
 
 # The "Creed feedback" form. Its question ids, from the form's page, in the order the page asks them.
 FORM_RESPONSE_URL = (
@@ -25,14 +26,11 @@ FIELDS = {
 KINDS = {"bug": "Bug", "idea": "Feature idea"}
 LIMITS = {"title": 120, "details": 4000, "device": 200, "email": 200}
 EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-TIMEOUT_SECONDS = 10
+TIMEOUT_SECONDS = forms.TIMEOUT_SECONDS
+__all__ = ["EMAIL", "FIELDS", "FORM_RESPONSE_URL", "Feedback", "InvalidFeedback", "NotDelivered", "clean", "send"]
 
 
 class InvalidFeedback(ValueError):
-    pass
-
-
-class NotDelivered(RuntimeError):
     pass
 
 
@@ -69,23 +67,10 @@ def clean(data: dict) -> Feedback:
 
 def send(feedback: Feedback, opener=urllib.request.urlopen) -> None:
     """Posts it to the form as an anonymous response."""
-    values = {
-        FIELDS["kind"]: KINDS[feedback.kind],
-        FIELDS["title"]: feedback.title,
-        FIELDS["details"]: feedback.details,
-        FIELDS["device"]: feedback.device,
-        FIELDS["email"]: feedback.email,
-    }
-    body = urllib.parse.urlencode({k: v for k, v in values.items() if v}).encode()
-    request = urllib.request.Request(
-        FORM_RESPONSE_URL, data=body, method="POST",
-        headers={"Content-Type": "application/x-www-form-urlencoded", "User-Agent": "Creed feedback"},
-    )
-    try:
-        with opener(request, timeout=TIMEOUT_SECONDS) as response:
-            if response.status >= 400:
-                raise NotDelivered(f"The form answered {response.status}.")
-    except urllib.error.HTTPError as exc:
-        raise NotDelivered(f"The form answered {exc.code}.") from exc
-    except (urllib.error.URLError, TimeoutError) as exc:
-        raise NotDelivered("The form couldn't be reached.") from exc
+    forms.post(FORM_RESPONSE_URL, [
+        (FIELDS["kind"], KINDS[feedback.kind]),
+        (FIELDS["title"], feedback.title),
+        (FIELDS["details"], feedback.details),
+        (FIELDS["device"], feedback.device),
+        (FIELDS["email"], feedback.email),
+    ], opener=opener)

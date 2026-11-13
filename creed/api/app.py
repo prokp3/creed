@@ -11,7 +11,8 @@ import psycopg
 from fastapi import Body, Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
 
-from creed import auth, config, feedback, notify
+from creed import auth, config, feedback, notify, signup
+from creed.forms import NotDelivered
 from creed import settings as app_settings
 from creed.api import views
 from creed.api.auth_routes import router as auth_router
@@ -173,6 +174,22 @@ def send_feedback(data: Annotated[dict[str, Any], Body()]) -> dict[str, bool]:
     try:
         feedback.send(report)
     except feedback.NotDelivered:
+        raise HTTPException(status_code=502, detail="It didn't go through. Please try again in a minute.") from None
+    return {"sent": True}
+
+
+@app.post("/api/public/try-form")
+def send_signup(data: Annotated[dict[str, Any], Body()]) -> dict[str, bool]:
+    """Answers from the public Try Creed page, passed on to the creator's form, which emails them. Nothing is stored."""
+    if isinstance(data.get("website"), str) and data["website"].strip():
+        return {"sent": True}
+    try:
+        answers = signup.clean(data)
+    except signup.InvalidSignup as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    try:
+        signup.send(answers)
+    except NotDelivered:
         raise HTTPException(status_code=502, detail="It didn't go through. Please try again in a minute.") from None
     return {"sent": True}
 

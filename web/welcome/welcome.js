@@ -7,22 +7,12 @@ import '@fontsource/barlow-condensed/600.css';
 import '@fontsource/barlow-condensed/700.css';
 import './welcome.css';
 
-// Paste the Google Form's share link here (https://forms.gle/... or https://docs.google.com/forms/...).
-// Until it's set, the "Try Creed" buttons scroll to the Try section, which says the form opens soon.
-const FORM_URL = 'https://docs.google.com/forms/d/e/1FAIpQLScQdtXWNZKVxbccSg4t7PZMwELSsg5bummqvamgjwyImps4aA/viewform';
-
-const formReady = /^https:\/\/(forms\.gle|docs\.google\.com\/forms)\//.test(FORM_URL);
-for (const link of document.querySelectorAll('[data-form]')) {
-  if (formReady) {
-    link.href = FORM_URL;
-    link.target = '_blank';
-    link.rel = 'noopener';
-  } else {
-    link.href = '#try';
-  }
-}
-document.getElementById('form-open')?.toggleAttribute('hidden', !formReady);
-document.getElementById('form-soon')?.toggleAttribute('hidden', formReady);
+// "Try Creed" opens the site's own Try page, which passes the answers to the creator's Google Form. Without the
+// script the buttons scroll to the Try section instead.
+const TRY_PAGE = '/try/';
+for (const link of document.querySelectorAll('[data-form]')) link.href = TRY_PAGE;
+document.getElementById('form-open')?.removeAttribute('hidden');
+document.getElementById('form-soon')?.setAttribute('hidden', '');
 
 // ---- The visitor's race countdown -------------------------------------------------------------------------
 // Kept only in this browser, so a returning visitor sees their own race. Storage can be unavailable (private

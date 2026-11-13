@@ -27,7 +27,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   // The public pages aren't part of the app: leave them to the network so they're never saved as the app's page.
-  if (url.pathname.startsWith('/welcome') || url.pathname.startsWith('/feedback')) {
+  if (['/welcome', '/try', '/feedback'].some((page) => url.pathname.startsWith(page))) {
     return;
   }
   if (event.request.mode === 'navigate') {

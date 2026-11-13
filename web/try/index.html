@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Try Creed · Tell me about you</title>
+    <meta name="description" content="Want to try Creed? Tell Kartikeya about your training and get help setting it up." />
+    <meta name="theme-color" content="#F6F5F1" />
+    <link rel="icon" href="/icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <script type="module" src="./try.js"></script>
+  </head>
+  <body>
+    <div class="page topo">
+      <svg class="grain" aria-hidden="true" width="100%" height="100%"><filter id="grain"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3" stitchTiles="stitch"></feTurbulence><feColorMatrix type="saturate" values="0"></feColorMatrix></filter><rect width="100%" height="100%" filter="url(#grain)"></rect></svg>
+      <svg class="wm" viewBox="0 0 1024 1024" aria-hidden="true"><path d="M706 336 A262 262 0 1 0 706 688" fill="none" stroke="rgba(10,10,11,0.06)" stroke-width="88" stroke-linecap="round"></path><circle cx="773" cy="512" r="60" fill="rgba(211,18,42,0.2)"></circle></svg>
+
+      <header class="wrap fade" style="padding-top: 24px; padding-bottom: 24px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px">
+        <a href="/welcome/" class="navlogo" style="display: flex; align-items: center; gap: 10px; text-decoration: none; min-height: 44px">
+          <svg viewBox="0 0 1024 1024" width="26" height="26" aria-hidden="true"><path d="M706 336 A262 262 0 1 0 706 688" fill="none" stroke="#0a0a0b" stroke-width="96" stroke-linecap="round"></path><circle cx="773" cy="512" r="64" fill="#d3122a"></circle></svg>
+          <span class="h" style="font-size: 20px; font-weight: 700; letter-spacing: 0.16em">CREED</span>
+        </a>
+        <nav aria-label="Main" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px 24px; font-size: 15px">
+          <a href="/welcome/" class="link">Homepage</a>
+          <a href="https://github.com/prokp3/creed#run-your-own-creed" target="_blank" rel="noopener" class="skip btn" data-skip>Skip the form <span aria-hidden="true">→</span></a>
+        </nav>
+      </header>
+
+      <main class="wrap" style="max-width: 860px; padding-top: 56px; padding-bottom: 80px">
+        <p class="lbl rise">Try Creed</p>
+        <h1 class="h rise" style="margin: 20px 0 0; font-size: clamp(52px, 8vw, 104px); line-height: 0.9; animation-delay: .1s">Want in?<br />Tell me about you<span style="color: #d3122a">.</span></h1>
+        <p class="rise" style="margin: 28px 0 0; max-width: 580px; font-size: 20px; color: #3a3a40; animation-delay: .2s">What you're training for, which Garmin you wear, and what you'd want from Creed. I'll reply personally and help you get set up. It takes about two minutes.</p>
+
+        <form id="try-form" novalidate style="margin-top: 56px">
+          <div class="form-grid rise" style="animation-delay: .3s">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 28px">
+              <label class="field">
+                <span class="lbl" style="font-size: 12px">Your name</span>
+                <input id="t-name" name="name" type="text" maxlength="120" required autocomplete="name" />
+              </label>
+              <label class="field">
+                <span class="lbl" style="font-size: 12px">Your email</span>
+                <input id="t-email" name="email" type="email" maxlength="200" required autocomplete="email" inputmode="email" />
+              </label>
+            </div>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 28px">
+              <label class="field">
+                <span class="lbl" style="font-size: 12px">Which Garmin do you use? <span style="text-transform: none; letter-spacing: 0">(optional)</span></span>
+                <input id="t-watch" name="watch" type="text" maxlength="120" autocomplete="off" placeholder="e.g. Forerunner 265" />
+              </label>
+              <label class="field">
+                <span class="lbl" style="font-size: 12px">Training for, and when? <span style="text-transform: none; letter-spacing: 0">(optional)</span></span>
+                <input id="t-training" name="training" type="text" maxlength="300" autocomplete="off" placeholder="e.g. Half distance, March 2027" />
+              </label>
+            </div>
+
+            <fieldset class="kinds">
+              <legend class="lbl" style="margin-bottom: 12px; font-size: 12px">Have you tried Creed? <span style="text-transform: none; letter-spacing: 0">(optional)</span></legend>
+              <label class="kind">
+                <input type="radio" name="tried" value="yes" />
+                <span class="card"><span class="title"><span class="dot" style="background: #3ddc97"></span>Yes</span><span class="hint">I've set up my own copy.</span></span>
+              </label>
+              <label class="kind">
+                <input type="radio" name="tried" value="not-yet" />
+                <span class="card"><span class="title"><span class="dot" style="background: #ffc233"></span>Not yet</span><span class="hint">I'd like to.</span></span>
+              </label>
+            </fieldset>
+
+            <label class="field" id="review-field">
+              <span class="lbl" style="font-size: 12px">Your review: what works, what doesn't, what's missing? <span style="text-transform: none; letter-spacing: 0">(optional)</span></span>
+              <textarea id="t-review" name="review" maxlength="4000" style="min-height: 120px"></textarea>
+            </label>
+
+            <label class="field">
+              <span class="lbl" style="font-size: 12px">What would you want Creed to do for you? <span style="text-transform: none; letter-spacing: 0">(optional)</span></span>
+              <textarea id="t-wishes" name="wishes" maxlength="4000" style="min-height: 120px"></textarea>
+            </label>
+
+            <fieldset class="kinds">
+              <legend class="lbl" style="margin-bottom: 12px; font-size: 12px">Can I email you about Creed?</legend>
+              <label class="kind">
+                <input type="radio" name="contact" value="yes" />
+                <span class="card"><span class="title"><span class="dot" style="background: #d3122a"></span>Yes, email me</span><span class="hint">Replies, setup help and the odd update.</span></span>
+              </label>
+              <label class="kind">
+                <input type="radio" name="contact" value="no" />
+                <span class="card"><span class="title"><span class="dot" style="background: #a9a7a0"></span>Just passing through</span><span class="hint">Only reply if I asked something.</span></span>
+              </label>
+            </fieldset>
+
+            <label class="trap" aria-hidden="true">Website<input name="website" type="text" tabindex="-1" autocomplete="off" /></label>
+
+            <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px 24px">
+              <button id="t-send" type="submit" class="btn btn-red" style="font-size: 18px">Send <span aria-hidden="true">→</span></button>
+              <p id="t-status" class="status" role="status" aria-live="polite"></p>
+            </div>
+            <p style="margin: -8px 0 0; font-size: 14px; color: #5a5a60">Your email is only used to reply to you about Creed.</p>
+          </div>
+        </form>
+
+        <section id="t-sent" class="sent" hidden tabindex="-1" aria-labelledby="t-sent-title" style="margin-top: 56px">
+          <p class="lbl">Sent</p>
+          <h2 id="t-sent-title" class="h" style="margin: 16px 0 0; font-size: clamp(40px, 6vw, 72px); line-height: 0.95">Thanks, see you at the finish<span style="color: #d3122a">.</span></h2>
+          <p style="margin: 20px 0 0; max-width: 540px; color: #3a3a40">I read every one and I'll reply by email soon. Want to start now? The setup guide is ready, or download the AI guide and let your assistant walk you through it.</p>
+          <div style="margin-top: 32px; display: flex; flex-wrap: wrap; gap: 14px 28px; align-items: center">
+            <a href="https://github.com/prokp3/creed#run-your-own-creed" target="_blank" rel="noopener" class="btn btn-ink" data-skip>Open the setup guide <span aria-hidden="true">→</span></a>
+            <a href="/creed-ai-setup-guide.md" download="creed-ai-setup-guide.md" class="link" style="font-weight: 500">Download the AI setup guide</a>
+          </div>
+        </section>
+
+        <div style="margin-top: 72px; display: flex; justify-content: flex-end">
+          <a href="https://github.com/prokp3/creed#run-your-own-creed" target="_blank" rel="noopener" class="skip btn" data-skip>Skip the form <span aria-hidden="true">→</span></a>
+        </div>
+      </main>
+
+      <footer style="border-top: 1px solid #d9d7d0">
+        <div class="wrap" style="padding-top: 28px; padding-bottom: 40px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; font-size: 13px; color: #5a5a60">
+          <span><span class="h" style="font-weight: 700; letter-spacing: 0.14em; color: #0a0a0b; font-size: 16px">CREED</span> · by Kartikeya · <a href="/feedback/" class="link" style="color: #5a5a60">Report a bug</a></span>
+          <span>Creed's server doesn't keep your answers. They go to my Google Form, which emails me.</span>
+        </div>
+      </footer>
+    </div>
+  </body>
+</html>

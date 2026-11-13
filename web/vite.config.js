@@ -30,12 +30,13 @@ export default defineConfig({
       },
     },
   },
-  // The app at /, and two public pages: the homepage at /welcome/ and the feedback page at /feedback/.
+  // The app at /, and the public pages: the homepage (/welcome/), Try Creed (/try/) and feedback (/feedback/).
   build: {
     rollupOptions: {
       input: {
         app: fileURLToPath(new URL('./index.html', import.meta.url)),
         welcome: fileURLToPath(new URL('./welcome/index.html', import.meta.url)),
+        try: fileURLToPath(new URL('./try/index.html', import.meta.url)),
         feedback: fileURLToPath(new URL('./feedback/index.html', import.meta.url)),
       },
     },
