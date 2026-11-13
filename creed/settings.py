@@ -32,6 +32,10 @@ class AppSettings:
     notify_recovery: bool = True
     notify_key_expiring: bool = True
     notify_sync_failed: bool = True
+    notify_workout: bool = True
+    notify_load_spike: bool = True
+    notify_weekly: bool = True
+    weekly_notify_time: str = "19:00"  # On Sundays, 24-hour here.
 
     def for_metrics(self) -> MetricSettings:
         return MetricSettings(
@@ -97,6 +101,10 @@ VALIDATORS = {
     "notify_recovery": lambda v: _flag("This notification", v),
     "notify_key_expiring": lambda v: _flag("This notification", v),
     "notify_sync_failed": lambda v: _flag("This notification", v),
+    "notify_workout": lambda v: _flag("This notification", v),
+    "notify_load_spike": lambda v: _flag("This notification", v),
+    "notify_weekly": lambda v: _flag("This notification", v),
+    "weekly_notify_time": _clock,
 }
 
 

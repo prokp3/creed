@@ -4,8 +4,10 @@
   import Screen from '../components/Screen.svelte';
   import SignInSettings from '../components/SignInSettings.svelte';
   import StatusNote from '../components/StatusNote.svelte';
+  import { onMount } from 'svelte';
   import { put } from '../lib/api.js';
   import { to12Hour, to24Hour, whole } from '../lib/format.js';
+  import { isSubscribed, permission, pushSupport, sendTest, startNotifications, stopNotifications } from '../lib/push.js';
   import { resource } from '../lib/resource.svelte.js';
 
   let { active, onsaved, freshness } = $props();
@@ -16,7 +18,14 @@
   let savedTimer;
 
   const s = $derived(res.data);
-  const time = $derived(s ? to12Hour(s.recovery_notify_time) : { hour: 7, minute: '30', period: 'AM' });
+  const supported = pushSupport();
+  let subscribed = $state(false);
+  let pushBusy = $state(false);
+  let tested = $state('');
+
+  onMount(async () => {
+    subscribed = await isSubscribed();
+  });
   const zones = typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : ['Asia/Kolkata'];
   // Browsers name some zones differently (Chrome lists Asia/Calcutta), so the saved one is always offered.
   const zoneChoices = $derived(s ? [...new Set([s.timezone, ...zones])] : zones);
@@ -47,13 +56,77 @@
     change({ [key]: text === '' ? null : Number(text) });
   }
 
-  function clockChange(part, value) {
-    const next = { ...time, [part]: value };
-    change({ recovery_notify_time: to24Hour(next.hour, next.minute, next.period) });
+  function clockChange(key, part, value) {
+    const next = { ...to12Hour(s[key]), [part]: value };
+    change({ [key]: to24Hour(next.hour, next.minute, next.period) });
+  }
+
+  // Notifications on this phone. iOS asks permission once, after this tap.
+  async function togglePhone() {
+    problem = null;
+    tested = '';
+    pushBusy = true;
+    try {
+      if (subscribed) {
+        await stopNotifications();
+        subscribed = false;
+      } else {
+        await startNotifications(s.push.public_key);
+        subscribed = true;
+      }
+    } catch (failure) {
+      problem = failure.message;
+    } finally {
+      pushBusy = false;
+    }
+    await res.load();
+  }
+
+  async function test() {
+    problem = null;
+    tested = '';
+    pushBusy = true;
+    try {
+      await sendTest('settings');
+      tested = 'Sent. It should arrive in a few seconds.';
+    } catch (failure) {
+      problem = failure.message;
+    } finally {
+      pushBusy = false;
+    }
   }
 
   const usingEstimate = (key) => s[key] === null;
 </script>
+
+{#snippet toggle(key, label)}
+  <div class="list-row">
+    <span id="n-{key}">{label}</span>
+    <button class="switch" role="switch" aria-labelledby="n-{key}" aria-checked={s[key]} onclick={() => change({ [key]: !s[key] })}><i></i></button>
+  </div>
+{/snippet}
+
+{#snippet clock(key, label)}
+  {@const time = to12Hour(s[key])}
+  <div class="list-row">
+    <span>Time</span>
+    <div class="clock">
+      <label class="visually-hidden" for="{key}-hour">{label} hour</label>
+      <select id="{key}-hour" class="field" value={time.hour} onchange={(e) => clockChange(key, 'hour', e.currentTarget.value)}>
+        {#each HOURS as hour (hour)}<option value={hour}>{hour}</option>{/each}
+      </select>
+      <label class="visually-hidden" for="{key}-minute">{label} minute</label>
+      <select id="{key}-minute" class="field" value={time.minute} onchange={(e) => clockChange(key, 'minute', e.currentTarget.value)}>
+        {#each MINUTES as minute (minute)}<option value={minute}>{minute}</option>{/each}
+        {#if !MINUTES.includes(time.minute)}<option value={time.minute}>{time.minute}</option>{/if}
+      </select>
+      <label class="visually-hidden" for="{key}-period">{label} AM or PM</label>
+      <select id="{key}-period" class="field" value={time.period} onchange={(e) => clockChange(key, 'period', e.currentTarget.value)}>
+        <option>AM</option><option>PM</option>
+      </select>
+    </div>
+  </div>
+{/snippet}
 
 <Screen {active}>
   <div class="gutter top">
@@ -121,39 +194,41 @@
 
     <section class="gutter stack">
       <h2 class="section-heading">Notifications</h2>
-      <div class="list">
-        <div class="list-row">
-          <span id="n-recovery">Recovery is ready</span>
-          <button class="switch" role="switch" aria-labelledby="n-recovery" aria-checked={s.notify_recovery} onclick={() => change({ notify_recovery: !s.notify_recovery })}><i></i></button>
-        </div>
-        <div class="list-row">
-          <span>Time</span>
-          <div class="clock">
-            <label class="visually-hidden" for="n-hour">Hour</label>
-            <select id="n-hour" class="field" value={time.hour} onchange={(e) => clockChange('hour', e.currentTarget.value)}>
-              {#each HOURS as hour (hour)}<option value={hour}>{hour}</option>{/each}
-            </select>
-            <label class="visually-hidden" for="n-minute">Minute</label>
-            <select id="n-minute" class="field" value={time.minute} onchange={(e) => clockChange('minute', e.currentTarget.value)}>
-              {#each MINUTES as minute (minute)}<option value={minute}>{minute}</option>{/each}
-              {#if !MINUTES.includes(time.minute)}<option value={time.minute}>{time.minute}</option>{/if}
-            </select>
-            <label class="visually-hidden" for="n-period">AM or PM</label>
-            <select id="n-period" class="field" value={time.period} onchange={(e) => clockChange('period', e.currentTarget.value)}>
-              <option>AM</option><option>PM</option>
-            </select>
+      {#if !s.push.public_key}
+        <p class="note">Notifications aren't set up on the server yet. Once the notification keys are added in Vercel, you can turn them on here. Your choices below are saved now.</p>
+      {:else if supported === 'needs-home-screen'}
+        <p class="note">Notifications need Creed opened from your home screen (iPhone, iOS 16.4 or later). Your choices below are saved now.</p>
+      {:else if supported === 'unsupported'}
+        <p class="note">This browser can't show notifications.</p>
+      {:else}
+        <div class="list">
+          <div class="list-row">
+            <span id="n-phone">On this phone</span>
+            <button class="switch" role="switch" aria-labelledby="n-phone" aria-checked={subscribed} disabled={pushBusy} data-no-haptics onclick={togglePhone}><i></i></button>
           </div>
         </div>
-        <div class="list-row">
-          <span id="n-key">Garmin key expiring soon</span>
-          <button class="switch" role="switch" aria-labelledby="n-key" aria-checked={s.notify_key_expiring} onclick={() => change({ notify_key_expiring: !s.notify_key_expiring })}><i></i></button>
-        </div>
-        <div class="list-row">
-          <span id="n-sync">Sync failed</span>
-          <button class="switch" role="switch" aria-labelledby="n-sync" aria-checked={s.notify_sync_failed} onclick={() => change({ notify_sync_failed: !s.notify_sync_failed })}><i></i></button>
-        </div>
+        {#if permission() === 'denied'}<p class="note">Notifications are blocked for Creed. Allow them in Settings › Notifications › Creed.</p>{/if}
+        {#if subscribed}
+          <div class="actions">
+            <button type="button" class="secondary-button pressable" disabled={pushBusy} onclick={test}>Send a test</button>
+          </div>
+          {#if tested}<p class="note" role="status">{tested}</p>{/if}
+        {:else if s.push.phones > 0}
+          <p class="note">Notifications go to {s.push.phones === 1 ? 'one other phone or browser' : `${s.push.phones} other phones or browsers`}.</p>
+        {/if}
+      {/if}
+      <div class="list">
+        {@render toggle('notify_recovery', 'Recovery is ready')}
+        {#if s.notify_recovery}{@render clock('recovery_notify_time', 'Recovery')}{/if}
+        {@render toggle('notify_workout', 'Workout recaps')}
+        {@render toggle('notify_load_spike', 'Load spike warning')}
+        {@render toggle('notify_weekly', 'Weekly summary on Sundays')}
+        {#if s.notify_weekly}{@render clock('weekly_notify_time', 'Weekly summary')}{/if}
+        {@render toggle('notify_key_expiring', 'Garmin key expiring soon')}
+        {@render toggle('notify_sync_failed', 'Sync failed')}
       </div>
-      <p class="note">These choices are saved now, but notifications don't send until that part is built.</p>
+      <p class="note">Creed checks about every 30 minutes, so notifications can be up to half an hour late. Recovery waits for last night's HRV, and is skipped if there's no score within 3 hours of your time. A load spike means your last week's load is at least 1.5 times your six-week average. Apart from Recovery and the weekly summary, nothing is sent between 10 PM and 7 AM.</p>
+      <p class="note">Recaps and summaries include your numbers. To hide them on the lock screen, set iPhone Settings › Notifications › Show Previews to When Unlocked.</p>
     </section>
 
     <section class="gutter stack">
@@ -209,6 +284,15 @@
   .number {
     width: 88px;
     text-align: right;
+  }
+
+  .actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .switch:disabled {
+    opacity: 0.5;
   }
 
   .clock {

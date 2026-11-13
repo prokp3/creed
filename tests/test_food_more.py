@@ -201,10 +201,11 @@ class TestSendingReminders:
         def broken(conn):
             raise RuntimeError("push service down")
         monkeypatch.setattr(notify, "send_food_reminders", broken)
+        monkeypatch.setattr(notify, "send_training_notifications", lambda conn, trigger: {"status": "ok"})
         monkeypatch.setattr(api_module, "_sync", lambda conn, trigger: {"status": "ok"})
         monkeypatch.setenv("CRON_SECRET", "s3cret")
         response = TestClient(api_module.app).post("/api/cron/sync", headers={"Authorization": "Bearer s3cret"})
-        assert response.json() == {"status": "ok", "reminders": {"status": "failed"}}
+        assert response.json() == {"status": "ok", "reminders": {"status": "failed"}, "notifications": {"status": "ok"}}
 
 
 class TestNotificationRoutes:
@@ -375,10 +376,13 @@ class TestCsv:
         assert len(day(owner)["meals"]) == 1
 
     def test_a_different_saved_entry_is_never_overwritten_silently(self, owner):
+        # The changes are stamped yesterday: an import is stamped now, and newest wins, so a change stamped later
+        # today would still win until that time came round.
+        yesterday = TODAY - timedelta(days=1)
         entry = eggs(owner)
-        log(owner, entry)
+        log(owner, entry, when=at(20, day=yesterday))
         text = owner.get("/api/food/export.csv").text
-        log(owner, {**entry, "quantity": 3}, when=at(21))
+        log(owner, {**entry, "quantity": 3}, when=at(21, day=yesterday))
         preview = _import(owner, text, preview=True)
         assert preview["counts"]["conflict"] == 1
         assert _import(owner, text)["counts"]["replaced"] == 0

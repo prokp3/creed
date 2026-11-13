@@ -88,3 +88,47 @@ def record(conn: psycopg.Connection, user_id: str, local_date: date, slot: str, 
 def set_outcome(conn: psycopg.Connection, user_id: str, local_date: date, slot: str, outcome: str) -> None:
     conn.execute("update food_reminder_sent set outcome = %s, sent_at = %s where user_id = %s and local_date = %s "
                  "and slot = %s", (outcome, datetime.now().astimezone(), user_id, local_date, slot))
+
+
+# ------------------------------------------------------------------ training notifications
+
+def claim(conn: psycopg.Connection, user_id: str, kind: str, ref: str, outcome: str) -> bool:
+    """Claim one training notification. False if it was already sent (or seen), so it never goes out twice."""
+    _not_acting(conn)
+    row = conn.execute(
+        "insert into notification_sent (user_id, kind, ref, outcome) values (%s, %s, %s, %s) "
+        "on conflict do nothing returning ref",
+        (_id(user_id, "User"), kind, ref, outcome),
+    ).fetchone()
+    return row is not None
+
+
+def set_notification_outcome(conn: psycopg.Connection, user_id: str, kind: str, ref: str, outcome: str) -> None:
+    conn.execute("update notification_sent set outcome = %s where user_id = %s and kind = %s and ref = %s",
+                 (outcome, _id(user_id, "User"), kind, ref))
+
+
+def claimed(conn: psycopg.Connection, user_id: str, kind: str, refs: list[str]) -> set[str]:
+    if not refs:
+        return set()
+    rows = conn.execute("select ref from notification_sent where user_id = %s and kind = %s and ref = any(%s)",
+                        (_id(user_id, "User"), kind, refs)).fetchall()
+    return {r["ref"] for r in rows}
+
+
+def last_notification(conn: psycopg.Connection, user_id: str, kind: str) -> datetime | None:
+    row = conn.execute("select max(sent_at) as at from notification_sent where user_id = %s and kind = %s "
+                       "and outcome = 'sent'", (_id(user_id, "User"), kind)).fetchone()
+    return row["at"]
+
+
+def has_phone(conn: psycopg.Connection, user_id: str) -> bool:
+    _not_acting(conn)
+    return conn.execute("select exists (select 1 from push_subscription where user_id = %s) as yes",
+                        (_id(user_id, "User"),)).fetchone()["yes"]
+
+
+def phone_count(conn: psycopg.Connection, user_id: str) -> int:
+    _not_acting(conn)
+    return conn.execute("select count(*) as n from push_subscription where user_id = %s",
+                        (_id(user_id, "User"),)).fetchone()["n"]

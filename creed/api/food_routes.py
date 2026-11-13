@@ -65,7 +65,7 @@ def library(session: Session, conn: Conn) -> dict[str, Any]:
                 for t in sorted(food.target_sets(conn, user), key=lambda t: (t.day_type, t.effective_from))
             ],
             "account": user,
-            "push": _push_info(),
+            "push": push_info(),
         }
 
 
@@ -73,7 +73,7 @@ def _settings_out(saved: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in saved.items() if k != "changed_at"}
 
 
-def _push_info() -> dict[str, Any]:
+def push_info() -> dict[str, Any]:
     """The public half of the notification key, which the phone needs to subscribe. None when not set up."""
     try:
         keys = push.load_vapid_keys()
@@ -330,9 +330,12 @@ async def unsubscribe(request: Request, session: Session, conn: Conn) -> dict[st
     return {"subscribed": False}
 
 
+TEST_SCREENS = {"food": "/#/food", "settings": "/#/settings"}
+
+
 @push_router.post("/test")
-def test_notification(session: Session, conn: Conn) -> dict[str, Any]:
-    """Send a notification to your own phones now, to check they arrive."""
+def test_notification(session: Session, conn: Conn, screen: str = "food") -> dict[str, Any]:
+    """Send a notification to your own phones now, to check they arrive. Tapping it opens the screen it came from."""
     try:
         keys = push.load_vapid_keys()
     except push.PushNotConfigured as exc:
@@ -340,7 +343,8 @@ def test_notification(session: Session, conn: Conn) -> dict[str, Any]:
     if keys is None:
         raise HTTPException(status_code=503, detail="Notifications aren't set up on the server yet.")
     delivered = notify.deliver(conn, session["user_id"], {
-        "title": "Creed", "body": "Notifications work.", "url": "/#/food", "tag": "test"}, keys)
+        "title": "Creed", "body": "Notifications work.", "url": TEST_SCREENS.get(screen, "/#/food"), "tag": "test"},
+        keys)
     conn.commit()
     if not delivered:
         raise HTTPException(status_code=409, detail="No phone took the notification. Turn notifications on again.")

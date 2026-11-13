@@ -74,4 +74,5 @@ export async function isSubscribed() {
   }
 }
 
-export const sendTest = () => post('/api/push/test');
+/** Tapping the test opens the screen it was sent from: food or settings. */
+export const sendTest = (screen = 'food') => post(`/api/push/test?screen=${screen}`);

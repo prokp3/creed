@@ -16,8 +16,9 @@ from creed import settings as app_settings
 from creed.api import views
 from creed.api.auth_routes import router as auth_router
 from creed.api.deps import Conn, OwnerSession
-from creed.api.food_routes import push_router
+from creed.api.food_routes import push_info, push_router
 from creed.api.food_routes import router as food_router
+from creed.db import push as db_push
 from creed.db import reads
 from creed.db.store import Store
 from creed.garmin import fit, track
@@ -230,13 +231,20 @@ def data_quality(_: OwnerSession, conn: Conn) -> dict[str, Any]:
 
 
 @app.get("/api/settings")
-def get_settings(_: OwnerSession, conn: Conn) -> dict[str, Any]:
+def get_settings(session: OwnerSession, conn: Conn) -> dict[str, Any]:
     saved, ctx = _context(conn)
-    return views.settings_view(saved, ctx)
+    return _settings_screen(saved, ctx, session, conn)
+
+
+def _settings_screen(saved: app_settings.AppSettings, ctx: Any, session: dict[str, Any],
+                     conn: psycopg.Connection) -> dict[str, Any]:
+    """Settings, plus what the phone needs to turn notifications on and how many phones have them."""
+    return {**views.settings_view(saved, ctx),
+            "push": {**push_info(), "phones": db_push.phone_count(conn, session["user_id"])}}
 
 
 @app.put("/api/settings")
-async def put_settings(request: Request, _: OwnerSession, conn: Conn) -> dict[str, Any]:
+async def put_settings(request: Request, session: OwnerSession, conn: Conn) -> dict[str, Any]:
     changes = await request.json()
     if not isinstance(changes, dict):
         raise HTTPException(status_code=422, detail="Send an object of settings to change.")
@@ -247,7 +255,7 @@ async def put_settings(request: Request, _: OwnerSession, conn: Conn) -> dict[st
         raise HTTPException(status_code=422, detail=str(exc)) from None
     conn.commit()
     saved, ctx = _context(conn)
-    return views.settings_view(saved, ctx)
+    return _settings_screen(saved, ctx, session, conn)
 
 
 def _sync(conn: psycopg.Connection, trigger: str) -> dict[str, Any]:
@@ -273,14 +281,23 @@ def _sync(conn: psycopg.Connection, trigger: str) -> dict[str, Any]:
 @app.api_route("/api/cron/sync", methods=["GET", "POST"], dependencies=[Depends(require_cron)])
 def cron_sync(conn: Conn) -> Response:
     """Called on a schedule by GitHub Actions (POST) and once a day by Vercel (GET), with a secret only they hold.
-    Food reminders go first, as they're quick, and a problem with them never stops the sync."""
+    Food reminders go first, as they're quick. Training notifications go after the sync, so they see its data.
+    A problem with either never stops the sync or changes its result."""
     try:
         sent = notify.send_food_reminders(conn)
     except Exception:  # noqa: BLE001
         conn.rollback()
         sent = {"status": "failed"}
     result = _sync(conn, "cron")
-    return JSONResponse({**result, "reminders": sent})
+    return JSONResponse({**result, "reminders": sent, "notifications": _training_notifications(conn, "cron")})
+
+
+def _training_notifications(conn: psycopg.Connection, trigger: str) -> dict[str, Any]:
+    try:
+        return notify.send_training_notifications(conn, trigger=trigger)
+    except Exception:  # noqa: BLE001
+        conn.rollback()
+        return {"status": "failed"}
 
 
 @app.post("/api/sync")
@@ -289,4 +306,6 @@ def sync_now(_: OwnerSession, conn: Conn) -> dict[str, Any]:
     if reads.sync_running(conn, SYNC_RUNNING_MINUTES):
         raise HTTPException(status_code=409, detail="A sync is already running. Try again in a minute.")
     result = _sync(conn, "manual")
+    # What this sync brought in is on screen now, so it isn't sent as a notification later.
+    _training_notifications(conn, "manual")
     return {"status": result["status"], "sync": _sync_status(conn)}

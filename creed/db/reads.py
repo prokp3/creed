@@ -61,6 +61,24 @@ def latest_run(conn: psycopg.Connection) -> dict[str, Any] | None:
     ).fetchone()
 
 
+def finished_runs(conn: psycopg.Connection, limit: int = 10) -> list[dict[str, Any]]:
+    """The latest finished syncs, newest first. Imports from an account export don't count."""
+    return conn.execute(
+        "select id, status, trigger, started_at, finished_at from sync_run "
+        "where trigger is distinct from 'export' and status <> 'running' order by id desc limit %s",
+        (limit,),
+    ).fetchall()
+
+
+def activities_started_since(conn: psycopg.Connection, since: datetime) -> list[dict[str, Any]]:
+    """Activities that started after `since`, oldest first. Multisport parents are left out: their legs count."""
+    return conn.execute(
+        "select activity_id, discipline, start_time, duration_seconds, distance_m from activity "
+        "where start_time >= %s and not is_parent order by start_time, activity_id",
+        (since,),
+    ).fetchall()
+
+
 def sync_running(conn: psycopg.Connection, within_minutes: int) -> bool:
     return conn.execute(
         "select exists (select 1 from sync_run where status = 'running' "
