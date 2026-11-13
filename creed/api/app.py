@@ -132,6 +132,31 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+# The public homepage's "Try Creed" button counts how many people tapped it. It's the one number the API shares
+# without a session: a single total, with nothing about who tapped. It lives in app_setting, which ignores keys
+# that aren't settings, so it needed no new table.
+TRY_CLICKS_KEY = "welcome_try_clicks"
+
+
+@app.get("/api/public/try")
+def try_clicks(conn: Conn) -> dict[str, int]:
+    row = conn.execute("select value from app_setting where key = %s", (TRY_CLICKS_KEY,)).fetchone()
+    return {"count": int(row["value"]) if row else 0}
+
+
+@app.post("/api/public/try")
+def count_try_click(conn: Conn) -> dict[str, int]:
+    """Adds one in a single statement, so taps arriving together are all counted."""
+    row = conn.execute(
+        "insert into app_setting (key, value) values (%s, '1'::jsonb) "
+        "on conflict (key) do update set value = to_jsonb((app_setting.value #>> '{}')::bigint + 1), "
+        "updated_at = now() returning value",
+        (TRY_CLICKS_KEY,),
+    ).fetchone()
+    conn.commit()
+    return {"count": int(row["value"])}
+
+
 @app.get("/api/race")
 def race_countdown(_: OwnerSession, conn: Conn) -> dict[str, Any]:
     """Just the countdown, so the bib on every screen doesn't need the whole of today's numbers."""

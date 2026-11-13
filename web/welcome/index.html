@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Creed · The triathlon dashboard for Garmin</title>
+    <meta name="description" content="Creed turns your Garmin into a race-day countdown: recovery every morning, fitness week on week, food that follows your training, and honest numbers. Free and open source." />
+    <meta name="theme-color" content="#0A0A0B" />
+    <meta property="og:title" content="Creed · Every day counts." />
+    <meta property="og:description" content="The triathlon dashboard for Garmin. Free, open source, and your data stays yours." />
+    <meta property="og:type" content="website" />
+    <link rel="icon" href="/icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <script type="module" src="./welcome.js"></script>
+  </head>
+  <body>
+    <div class="page topo">
+      <div class="progress" aria-hidden="true"></div>
+      <svg class="grain" aria-hidden="true" width="100%" height="100%"><filter id="grain"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3" stitchTiles="stitch"></feTurbulence><feColorMatrix type="saturate" values="0"></feColorMatrix></filter><rect width="100%" height="100%" filter="url(#grain)"></rect></svg>
+      <svg class="wm" viewBox="0 0 1024 1024" aria-hidden="true"><path d="M706 336 A262 262 0 1 0 706 688" fill="none" stroke="rgba(10,10,11,0.06)" stroke-width="88" stroke-linecap="round"></path><circle cx="773" cy="512" r="60" fill="rgba(211,18,42,0.2)"></circle></svg>
+
+      <!-- ===== Landing: the logo ===== -->
+      <section aria-label="Creed" class="topo-d" style="position: relative; overflow: hidden; background-color: #0a0a0b; color: #ffffff; height: clamp(600px, 100svh, 980px); display: flex; flex-direction: column">
+        <svg class="bigmark" viewBox="0 0 1024 1024" aria-hidden="true"><path class="arc" d="M706 336 A262 262 0 1 0 706 688" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="88" stroke-linecap="round" pathLength="100"></path><circle class="ldot" cx="773" cy="512" r="60" fill="#ff3b47"></circle></svg>
+        <header class="fade wrap" style="position: relative; width: 100%; padding-top: 24px; padding-bottom: 24px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px">
+          <a href="#top" class="navlogo" style="display: flex; align-items: center; gap: 10px; color: #ffffff; text-decoration: none; min-height: 44px">
+            <svg viewBox="0 0 1024 1024" width="26" height="26" aria-hidden="true"><path d="M706 336 A262 262 0 1 0 706 688" fill="none" stroke="#ffffff" stroke-width="96" stroke-linecap="round"></path><circle cx="773" cy="512" r="64" fill="#ff3b47"></circle></svg>
+            <span class="h" style="font-size: 20px; font-weight: 700; letter-spacing: 0.16em">CREED</span>
+          </a>
+          <nav aria-label="Main" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px 28px; font-size: 15px">
+            <a href="#how" class="link" style="color: #ffffff">How it works</a>
+            <a href="#privacy" class="link" style="color: #ffffff">Privacy</a>
+            <a href="#log" class="link" style="color: #ffffff">Progress</a>
+            <a href="#hosting" class="link" style="color: #ffffff">Hosting</a>
+            <a href="/" class="link" style="color: #b9b9c2">Sign in</a>
+            <a href="#try" data-form class="btn btn-white">Try Creed <span aria-hidden="true">→</span></a>
+          </nav>
+        </header>
+        <div class="wrap" style="position: relative; flex: 1 1 auto; width: 100%; display: flex; align-items: center">
+          <div class="intro-out">
+            <p class="lbl rise i1" style="margin: 0 0 20px; color: #b9b9c2">The triathlon dashboard for Garmin</p>
+            <h1 class="h rise i2" style="margin: 0; font-size: clamp(80px, 14vw, 220px); font-weight: 700; letter-spacing: 0.08em; line-height: 0.85">CREED</h1>
+            <p class="h rise i3" style="margin: 24px 0 0; font-size: clamp(26px, 3vw, 40px); font-weight: 500; color: #b9b9c2">Every day counts<span style="color: #ff3b47">.</span></p>
+          </div>
+        </div>
+        <a href="#meaning" class="fade i4 wrap" style="position: relative; width: 100%; padding-bottom: 32px; display: flex; align-items: flex-end; gap: 14px; color: #b9b9c2; text-decoration: none">
+          <span class="cue" aria-hidden="true"></span>
+          <span class="lbl" style="font-size: 12px; color: #b9b9c2">Scroll</span>
+        </a>
+      </section>
+
+      <!-- ===== What creed means ===== -->
+      <section id="meaning" aria-label="What creed means" class="wrap" style="max-width: 860px; padding-top: 120px; text-align: center">
+        <div class="reveal" style="display: flex; justify-content: center">
+          <svg viewBox="0 0 1024 1024" width="64" height="64" aria-hidden="true"><path d="M706 336 A262 262 0 1 0 706 688" fill="none" stroke="#0a0a0b" stroke-width="88" stroke-linecap="round"></path><circle cx="773" cy="512" r="60" fill="#d3122a"></circle></svg>
+        </div>
+        <p class="h reveal s1" style="margin: 28px 0 0; font-size: clamp(56px, 7vw, 96px); line-height: 1">creed</p>
+        <p class="lbl reveal s2" style="margin: 14px 0 0">/kriːd/ · noun</p>
+        <div class="reveal s2" style="display: flex; justify-content: center; margin-top: 32px"><span class="rule" style="width: 64px; background: #d3122a"></span></div>
+        <ol style="margin: 32px auto 0; padding: 0; list-style: none; max-width: 640px; display: flex; flex-direction: column; gap: 18px">
+          <li class="reveal s3" style="font-size: 21px"><span class="num" style="color: #a9a7a0; margin-right: 10px">1.</span>A set of beliefs that guides how you act, day after day.</li>
+          <li class="reveal s4" style="font-size: 21px"><span class="num" style="color: #a9a7a0; margin-right: 10px">2.</span>A promise you keep to yourself, most of all when it's hard.</li>
+        </ol>
+        <p class="reveal s5" style="margin: 36px 0 0; color: #5a5a60">Creed is a training dashboard built on one: <span style="color: #0a0a0b; font-weight: 600">every day counts.</span></p>
+      </section>
+
+      <!-- ===== Hero + the visitor's countdown ===== -->
+      <section id="top" class="wrap" style="padding-top: 120px">
+        <p class="lbl reveal">Race-day countdown · Recovery · Fitness · Food</p>
+        <h2 class="h reveal s1" style="margin: 28px 0 0; font-size: clamp(60px, 10vw, 152px); line-height: 0.88"><span class="mask"><span>Every day</span></span><span class="mask"><span>counts<span style="color: #d3122a">.</span></span></span></h2>
+        <div style="margin-top: 56px; display: flex; flex-wrap: wrap; gap: 32px 64px; align-items: flex-end; justify-content: space-between">
+          <p class="reveal s2" style="margin: 0; max-width: 500px; font-size: 20px; color: #3a3a40">Recovery each morning, fitness week on week, food that follows your training, and a countdown to race day. All from the watch you already wear.</p>
+          <div class="reveal s3" style="display: flex; flex-wrap: wrap; gap: 14px; align-items: center">
+            <a href="#try" data-form class="btn btn-red">Try Creed <span aria-hidden="true">→</span></a>
+            <a href="#countdown" class="link" style="padding: 12px 6px; font-weight: 500">Set your race day</a>
+          </div>
+        </div>
+
+        <div id="countdown" class="reveal s4" style="margin-top: 80px; scroll-margin-top: 40px">
+          <span class="rule dark"></span>
+          <div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 32px; padding: 28px 0">
+            <div>
+              <p id="race-label" class="lbl" style="margin: 0 0 18px">Pick your race day</p>
+              <div id="digits" class="digits empty" role="timer" aria-label="Countdown to your race day" style="display: flex; flex-wrap: wrap; gap: 8px 40px; align-items: flex-end">
+                <div><p id="cd-d" class="num" style="margin: 0; font-size: clamp(56px, 9vw, 88px); font-weight: 600; line-height: 0.9">--</p><p class="lbl" style="margin: 8px 0 0; font-size: 12px">Days</p></div>
+                <div><p id="cd-h" class="num" style="margin: 0; font-size: clamp(56px, 9vw, 88px); font-weight: 500; line-height: 0.9; color: #5a5a60">--</p><p class="lbl" style="margin: 8px 0 0; font-size: 12px">Hours</p></div>
+                <div><p id="cd-m" class="num" style="margin: 0; font-size: clamp(56px, 9vw, 88px); font-weight: 500; line-height: 0.9; color: #5a5a60">--</p><p class="lbl" style="margin: 8px 0 0; font-size: 12px">Minutes</p></div>
+                <div><p id="cd-s" class="num" style="margin: 0; font-size: clamp(56px, 9vw, 88px); font-weight: 500; line-height: 0.9; color: #d3122a">--</p><p class="lbl" style="margin: 8px 0 0; font-size: 12px">Seconds</p><span id="cd-tick" class="tick idle" aria-hidden="true"></span></div>
+              </div>
+            </div>
+            <div role="group" aria-label="Your race" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px 20px; align-content: end; flex: 0 1 460px; min-width: 260px">
+              <label class="field"><span class="lbl" style="font-size: 12px">Race date</span><input id="race-date" type="date" /></label>
+              <label class="field"><span class="lbl" style="font-size: 12px">Start time</span><input id="race-time" type="time" value="06:30" /></label>
+              <label class="field"><span class="lbl" style="font-size: 12px">Distance</span>
+                <select id="race-dist">
+                  <option value="sprint">Sprint</option>
+                  <option value="olympic">Olympic</option>
+                  <option value="half" selected>Half</option>
+                  <option value="full">Full</option>
+                </select>
+              </label>
+            </div>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px 24px; padding-bottom: 20px; font-size: 15px" class="num">
+            <span><span class="dot" style="background: #38bdf8"></span> Swim <span id="dist-swim">1.9</span> km</span>
+            <span><span class="dot" style="background: #ffc233"></span> Bike <span id="dist-bike">90</span> km</span>
+            <span><span class="dot" style="background: #3ddc97"></span> Run <span id="dist-run">21.1</span> km</span>
+            <span style="color: #5a5a60">Your race stays in this browser.</span>
+          </div>
+          <span class="rule"></span>
+        </div>
+      </section>
+
+      <!-- ===== Ticker ===== -->
+      <div aria-hidden="true" style="margin-top: 120px; border-top: 1px solid #d9d7d0; border-bottom: 1px solid #d9d7d0; overflow: hidden">
+        <div class="ticker lbl" style="padding: 16px 0; white-space: nowrap; font-size: 13px">
+          <div style="display: flex; gap: 40px; padding-right: 40px"><span>Swim</span><span style="color: #38bdf8">●</span><span>Bike</span><span style="color: #ffc233">●</span><span>Run</span><span style="color: #3ddc97">●</span><span>Recover</span><span style="color: #a78bfa">●</span><span>Fuel</span><span style="color: #d3122a">●</span><span>Repeat</span><span>●</span><span>Swim</span><span style="color: #38bdf8">●</span><span>Bike</span><span style="color: #ffc233">●</span><span>Run</span><span style="color: #3ddc97">●</span><span>Recover</span><span style="color: #a78bfa">●</span><span>Fuel</span><span style="color: #d3122a">●</span><span>Repeat</span><span>●</span></div>
+          <div style="display: flex; gap: 40px; padding-right: 40px"><span>Swim</span><span style="color: #38bdf8">●</span><span>Bike</span><span style="color: #ffc233">●</span><span>Run</span><span style="color: #3ddc97">●</span><span>Recover</span><span style="color: #a78bfa">●</span><span>Fuel</span><span style="color: #d3122a">●</span><span>Repeat</span><span>●</span><span>Swim</span><span style="color: #38bdf8">●</span><span>Bike</span><span style="color: #ffc233">●</span><span>Run</span><span style="color: #3ddc97">●</span><span>Recover</span><span style="color: #a78bfa">●</span><span>Fuel</span><span style="color: #d3122a">●</span><span>Repeat</span><span>●</span></div>
+        </div>
+      </div>
+
+      <!-- ===== 00 A day ===== -->
+      <section class="wrap" style="padding-top: 140px">
+        <div style="display: flex; flex-wrap: wrap; gap: 32px 80px">
+          <div style="flex: 1 1 300px; min-width: 0">
+            <p class="lbl reveal" style="margin: 0 0 16px">00 — Warm-up</p>
+            <h2 class="h reveal s1" style="margin: 0; font-size: clamp(40px, 5vw, 64px); line-height: 0.95">A day with Creed</h2>
+          </div>
+          <div style="flex: 2 1 520px; min-width: 0">
+            <div class="reveal s1"><span class="rule"></span></div>
+            <div class="row reveal s1" style="display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 20px; padding: 22px 0; border-bottom: 1px solid #d9d7d0"><span class="num" style="font-size: 26px; font-weight: 600">06:00</span><div><p style="margin: 0; font-weight: 600">Your Recovery score arrives</p><p style="margin: 2px 0 0; color: #5a5a60; font-size: 15px">"Recovery 74. Good to train. Slept 7 h 42 m."</p></div></div>
+            <div class="row reveal s2" style="display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 20px; padding: 22px 0; border-bottom: 1px solid #d9d7d0"><span class="num" style="font-size: 26px; font-weight: 600">07:30</span><div><p style="margin: 0; font-weight: 600"><span class="dot" style="background: #38bdf8; margin-right: 8px"></span>Your swim syncs on its own</p><p style="margin: 2px 0 0; color: #5a5a60; font-size: 15px">"Swim · 2.1 km in 46 min. Load 58."</p></div></div>
+            <div class="row reveal s3" style="display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 20px; padding: 22px 0; border-bottom: 1px solid #d9d7d0"><span class="num" style="font-size: 26px; font-weight: 600">13:00</span><div><p style="margin: 0; font-weight: 600">Lunch, logged in one tap</p><p style="margin: 2px 0 0; color: #5a5a60; font-size: 15px">Training day, so your calorie and protein targets are already higher.</p></div></div>
+            <div class="row reveal s4" style="display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 20px; padding: 22px 0; border-bottom: 1px solid #d9d7d0"><span class="num" style="font-size: 26px; font-weight: 600">SUN</span><div><p style="margin: 0; font-weight: 600">Your week, summed up</p><p style="margin: 2px 0 0; color: #5a5a60; font-size: 15px">Training, load against last week, food, and days to go.</p></div></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== 01 How it works ===== -->
+      <section id="how" class="wrap" style="padding-top: 140px">
+        <div style="display: flex; flex-wrap: wrap; gap: 32px 80px">
+          <div style="flex: 1 1 300px; min-width: 0">
+            <p class="lbl reveal" style="margin: 0 0 16px"><span class="dot" style="background: #38bdf8; margin-right: 8px"></span>01 — Swim</p>
+            <h2 class="h reveal s1" style="margin: 0; font-size: clamp(40px, 5vw, 64px); line-height: 0.95">How it works</h2>
+            <p class="reveal s2" style="margin: 16px 0 0; color: #5a5a60; max-width: 300px">Four steps, once. Then it syncs every 30 minutes on its own.</p>
+          </div>
+          <ol style="flex: 2 1 520px; min-width: 0; margin: 0; padding: 0; list-style: none">
+            <li class="reveal s1"><span class="rule"></span></li>
+            <li class="row reveal s1" style="display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 20px; padding: 26px 0; border-bottom: 1px solid #d9d7d0"><span class="num" style="font-size: 40px; font-weight: 500; line-height: 1; color: #a9a7a0">01</span><div><h3 style="margin: 0; font-size: 20px; font-weight: 600">Get your Garmin key</h3><p style="margin: 4px 0 0; color: #5a5a60">Create one in Garmin Connect. Workouts, sleep, heart rate and HRV come across, history included.</p></div></li>
+            <li class="row reveal s2" style="display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 20px; padding: 26px 0; border-bottom: 1px solid #d9d7d0"><span class="num" style="font-size: 40px; font-weight: 500; line-height: 1; color: #a9a7a0">02</span><div><h3 style="margin: 0; font-size: 20px; font-weight: 600">Deploy your copy, free</h3><p style="margin: 4px 0 0; color: #5a5a60">On free Vercel, Supabase and GitHub accounts. About an hour, step by step.</p></div></li>
+            <li class="row reveal s3" style="display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 20px; padding: 26px 0; border-bottom: 1px solid #d9d7d0"><span class="num" style="font-size: 40px; font-weight: 500; line-height: 1; color: #a9a7a0">03</span><div><h3 style="margin: 0; font-size: 20px; font-weight: 600">Add it to your home screen</h3><p style="margin: 4px 0 0; color: #5a5a60">It opens like an app and signs you in with Face ID.</p></div></li>
+            <li class="row reveal s4" style="display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 20px; padding: 26px 0; border-bottom: 1px solid #d9d7d0"><span class="num" style="font-size: 40px; font-weight: 500; line-height: 1; color: #a9a7a0">04</span><div><h3 style="margin: 0; font-size: 20px; font-weight: 600">Set your race day</h3><p style="margin: 4px 0 0; color: #5a5a60">The countdown starts, to the second.</p></div></li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- ===== 02 Benefits ===== -->
+      <section id="benefits" class="wrap" style="padding-top: 140px">
+        <p class="lbl reveal" style="margin: 0 0 16px"><span class="dot" style="background: #ffc233; margin-right: 8px"></span>02 — Bike</p>
+        <h2 class="h reveal s1" style="margin: 0 0 48px; font-size: clamp(40px, 5vw, 64px); line-height: 0.95">Train with the full picture</h2>
+        <div class="reveal s1"><span class="rule dark"></span></div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); border-left: 1px solid #d9d7d0">
+          <div class="row reveal s1" style="padding: 32px 28px; border-right: 1px solid #d9d7d0; border-bottom: 1px solid #d9d7d0"><p class="lbl" style="margin: 0 0 18px; font-size: 12px">Recovery</p><h3 style="margin: 0 0 6px; font-size: 21px; font-weight: 600">Know when to push</h3><p style="margin: 0; color: #5a5a60; font-size: 15px">A morning score from your sleep, HRV and resting heart rate.</p></div>
+          <div class="row reveal s2" style="padding: 32px 28px; border-right: 1px solid #d9d7d0; border-bottom: 1px solid #d9d7d0"><p class="lbl" style="margin: 0 0 18px; font-size: 12px">Fitness</p><h3 style="margin: 0 0 6px; font-size: 21px; font-weight: 600">See the block build</h3><p style="margin: 0; color: #5a5a60; font-size: 15px">Fitness, fatigue and form over 7 to 180 days.</p></div>
+          <div class="row reveal s3" style="padding: 32px 28px; border-right: 1px solid #d9d7d0; border-bottom: 1px solid #d9d7d0"><p class="lbl" style="margin: 0 0 18px; font-size: 12px">Food</p><h3 style="margin: 0 0 6px; font-size: 21px; font-weight: 600">Fuel the work</h3><p style="margin: 0; color: #5a5a60; font-size: 15px">One-tap meals, a barcode scanner, and targets that rise on training days.</p></div>
+          <div class="row reveal s1" style="padding: 32px 28px; border-right: 1px solid #d9d7d0; border-bottom: 1px solid #d9d7d0"><p class="lbl" style="margin: 0 0 18px; font-size: 12px">Load</p><h3 style="margin: 0 0 6px; font-size: 21px; font-weight: 600">Catch overload early</h3><p style="margin: 0; color: #5a5a60; font-size: 15px">A warning when a week's load reaches 1.5× your six-week average.</p></div>
+          <div class="row reveal s2" style="padding: 32px 28px; border-right: 1px solid #d9d7d0; border-bottom: 1px solid #d9d7d0"><p class="lbl" style="margin: 0 0 18px; font-size: 12px">Honest numbers</p><h3 style="margin: 0 0 6px; font-size: 21px; font-weight: 600">Nothing guessed</h3><p style="margin: 0; color: #5a5a60; font-size: 15px">Garmin's values unchanged. Creed's own show their formula.</p></div>
+          <div class="row reveal s3" style="padding: 32px 28px; border-right: 1px solid #d9d7d0; border-bottom: 1px solid #d9d7d0"><p class="lbl" style="margin: 0 0 18px; font-size: 12px">Notifications</p><h3 style="margin: 0 0 6px; font-size: 21px; font-weight: 600">Told when it matters</h3><p style="margin: 0; color: #5a5a60; font-size: 15px">A recap per workout and a summary every Sunday.</p></div>
+        </div>
+      </section>
+
+      <!-- ===== 03 Who ===== -->
+      <section id="who" class="wrap" style="padding-top: 140px">
+        <p class="lbl reveal" style="margin: 0 0 16px"><span class="dot" style="background: #3ddc97; margin-right: 8px"></span>03 — Run</p>
+        <h2 class="h reveal s1" style="margin: 0 0 48px; font-size: clamp(40px, 5vw, 64px); line-height: 0.95">Who it's for</h2>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 48px">
+          <div class="reveal s1"><span class="rule dark"></span><p class="num" style="margin: 20px 0 10px; font-size: 15px; color: #5a5a60">#001</p><h3 class="h" style="margin: 0 0 8px; font-size: 32px">The first-timer</h3><p style="margin: 0; color: #5a5a60">Training for your first triathlon and want to know you're on track, without a spreadsheet.</p></div>
+          <div class="reveal s2"><span class="rule dark"></span><p class="num" style="margin: 20px 0 10px; font-size: 15px; color: #5a5a60">#070</p><h3 class="h" style="margin: 0 0 8px; font-size: 32px">The age-grouper</h3><p style="margin: 0; color: #5a5a60">Chasing a faster finish, balancing load, recovery and fuel across three sports.</p></div>
+          <div class="reveal s3"><span class="rule dark"></span><p class="num" style="margin: 20px 0 10px; font-size: 15px; color: #5a5a60">#113</p><h3 class="h" style="margin: 0 0 8px; font-size: 32px">The numbers person</h3><p style="margin: 0; color: #5a5a60">You want to see how every metric is worked out, and you'd rather see "not enough data" than a guess.</p></div>
+        </div>
+        <p class="reveal s4" style="margin: 48px 0 0; color: #5a5a60; font-size: 15px">Creed doesn't write training plans. It shows you how yours is landing.</p>
+      </section>
+
+      <!-- ===== Privacy ===== -->
+      <section id="privacy" class="topo-d" style="position: relative; overflow: hidden; background-color: #0a0a0b; color: #ffffff; margin-top: 140px">
+        <svg class="spin-slow" viewBox="0 0 1024 1024" aria-hidden="true" style="position: absolute; left: -260px; bottom: -320px; width: 900px; height: 900px; pointer-events: none"><path d="M706 336 A262 262 0 1 0 706 688" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="88" stroke-linecap="round"></path><circle cx="773" cy="512" r="60" fill="rgba(255,59,71,0.35)"></circle></svg>
+        <div class="wrap" style="position: relative; padding-top: 120px; padding-bottom: 120px">
+          <div style="display: flex; flex-wrap: wrap; gap: 32px 80px; align-items: flex-end; justify-content: space-between">
+            <div>
+              <p class="lbl reveal" style="margin: 0 0 16px; color: #92929c">Privacy</p>
+              <h2 class="h reveal s1" style="margin: 0; font-size: clamp(48px, 7vw, 104px); line-height: 0.9"><span class="mask"><span>Your data.</span></span><span class="mask"><span>Only yours<span style="color: #ff3b47">.</span></span></span></h2>
+            </div>
+            <p class="reveal s2" style="margin: 0; max-width: 420px; color: #b9b9c2; font-size: 19px">There's no Creed company server in the middle. Your Creed is your own copy, on accounts you own, so nobody else can look at your training. <span style="color: #ffffff">Not even me.</span></p>
+          </div>
+          <div class="reveal s2" style="margin-top: 64px"><span class="rule-d"></span></div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); border-left: 1px solid #2a2a30">
+            <div class="pcell reveal s1" style="padding: 32px 28px; border-right: 1px solid #2a2a30; border-bottom: 1px solid #2a2a30"><p class="num" style="margin: 0 0 18px; color: #ff3b47; font-size: 15px">01</p><h3 style="margin: 0 0 6px; font-size: 20px; font-weight: 600">Your own database</h3><p style="margin: 0; color: #b9b9c2; font-size: 15px">One copy, one athlete. Your data sits in a database only your account can open.</p></div>
+            <div class="pcell reveal s2" style="padding: 32px 28px; border-right: 1px solid #2a2a30; border-bottom: 1px solid #2a2a30"><p class="num" style="margin: 0 0 18px; color: #ff3b47; font-size: 15px">02</p><h3 style="margin: 0 0 6px; font-size: 20px; font-weight: 600">Locked at every table</h3><p style="margin: 0; color: #b9b9c2; font-size: 15px">Row-level security on every table, no public access, and keys that never reach the browser.</p></div>
+            <div class="pcell reveal s3" style="padding: 32px 28px; border-right: 1px solid #2a2a30; border-bottom: 1px solid #2a2a30"><p class="num" style="margin: 0 0 18px; color: #ff3b47; font-size: 15px">03</p><h3 style="margin: 0 0 6px; font-size: 20px; font-weight: 600">No password to steal</h3><p style="margin: 0; color: #b9b9c2; font-size: 15px">You sign in with Face ID. The server only ever holds the public half of your passkey.</p></div>
+            <div class="pcell reveal s1" style="padding: 32px 28px; border-right: 1px solid #2a2a30; border-bottom: 1px solid #2a2a30"><p class="num" style="margin: 0 0 18px; color: #ff3b47; font-size: 15px">04</p><h3 style="margin: 0 0 6px; font-size: 20px; font-weight: 600">Never your Garmin password</h3><p style="margin: 0; color: #b9b9c2; font-size: 15px">Creed reads Garmin with a key you create and can revoke. It never asks for your login.</p></div>
+            <div class="pcell reveal s2" style="padding: 32px 28px; border-right: 1px solid #2a2a30; border-bottom: 1px solid #2a2a30"><p class="num" style="margin: 0 0 18px; color: #ff3b47; font-size: 15px">05</p><h3 style="margin: 0 0 6px; font-size: 20px; font-weight: 600">Nothing handed out</h3><p style="margin: 0; color: #b9b9c2; font-size: 15px">Barcodes are read on your phone and looked up without saying who's asking. Your GPS routes are never copied anywhere.</p></div>
+            <div class="pcell reveal s3" style="padding: 32px 28px; border-right: 1px solid #2a2a30; border-bottom: 1px solid #2a2a30"><p class="num" style="margin: 0 0 18px; color: #ff3b47; font-size: 15px">06</p><h3 style="margin: 0 0 6px; font-size: 20px; font-weight: 600">Sealed notifications</h3><p style="margin: 0; color: #b9b9c2; font-size: 15px">Encrypted for your phone, so even Apple's push service can't read them.</p></div>
+          </div>
+          <p class="reveal s4" style="margin: 32px 0 0; font-size: 14px; color: #92929c">All of it is open source, so you don't have to take my word for it.</p>
+        </div>
+      </section>
+
+      <!-- ===== The Creed ===== -->
+      <section class="wrap" style="padding-top: 140px">
+        <p class="lbl reveal" style="margin: 0 0 16px">The Creed</p>
+        <h2 class="h reveal s1" style="margin: 0 0 56px; font-size: clamp(40px, 5vw, 64px); line-height: 0.95">Five rules</h2>
+        <ol class="rules" style="margin: 0; padding: 0; list-style: none">
+          <li class="reveal s1"><span class="rule dark"></span></li>
+          <li class="reveal s1" style="display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 20px; align-items: baseline; padding: 26px 0; border-bottom: 1px solid #d9d7d0"><span class="num" style="color: #d3122a; font-size: 18px">01</span><div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 32px; align-items: baseline"><p class="h" style="margin: 0; font-size: clamp(28px, 3.6vw, 46px); line-height: 1">Every day counts down.</p><p style="margin: 0; color: #5a5a60; font-size: 15px">The countdown ticks to the second.</p></div></li>
+          <li class="reveal s2" style="display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 20px; align-items: baseline; padding: 26px 0; border-bottom: 1px solid #d9d7d0"><span class="num" style="color: #d3122a; font-size: 18px">02</span><div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 32px; align-items: baseline"><p class="h" style="margin: 0; font-size: clamp(28px, 3.6vw, 46px); line-height: 1">Numbers don't guess.</p><p style="margin: 0; color: #5a5a60; font-size: 15px">Not enough data? It says so.</p></div></li>
+          <li class="reveal s3" style="display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 20px; align-items: baseline; padding: 26px 0; border-bottom: 1px solid #d9d7d0"><span class="num" style="color: #d3122a; font-size: 18px">03</span><div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 32px; align-items: baseline"><p class="h" style="margin: 0; font-size: clamp(28px, 3.6vw, 46px); line-height: 1">Recover like you mean it.</p><p style="margin: 0; color: #5a5a60; font-size: 15px">Rest is training too.</p></div></li>
+          <li class="reveal s4" style="display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 20px; align-items: baseline; padding: 26px 0; border-bottom: 1px solid #d9d7d0"><span class="num" style="color: #d3122a; font-size: 18px">04</span><div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 32px; align-items: baseline"><p class="h" style="margin: 0; font-size: clamp(28px, 3.6vw, 46px); line-height: 1">Fuel the work.</p><p style="margin: 0; color: #5a5a60; font-size: 15px">Big days get bigger targets.</p></div></li>
+          <li class="reveal s5" style="display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 20px; align-items: baseline; padding: 26px 0; border-bottom: 1px solid #d9d7d0"><span class="num" style="color: #d3122a; font-size: 18px">05</span><div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 32px; align-items: baseline"><p class="h" style="margin: 0; font-size: clamp(28px, 3.6vw, 46px); line-height: 1">Your data is yours.</p><p style="margin: 0; color: #5a5a60; font-size: 15px">Your own database, on your own accounts.</p></div></li>
+        </ol>
+      </section>
+
+      <!-- ===== Built by ===== -->
+      <section id="built-by" class="wrap" style="padding-top: 140px">
+        <div style="display: flex; flex-wrap: wrap; gap: 48px 80px; align-items: flex-start">
+          <div class="reveal" style="flex: 0 1 320px; min-width: 0">
+            <div style="aspect-ratio: 4 / 5; background: #0a0a0b; display: flex; align-items: center; justify-content: center">
+              <svg viewBox="0 0 1024 1024" width="45%" aria-hidden="true"><path d="M706 336 A262 262 0 1 0 706 688" fill="none" stroke="#ffffff" stroke-width="88" stroke-linecap="round"></path><circle cx="773" cy="512" r="60" fill="#ff3b47"></circle></svg>
+            </div>
+          </div>
+          <div style="flex: 1 1 440px; min-width: 0">
+            <p class="lbl reveal" style="margin: 0 0 16px">Built by</p>
+            <h2 class="h reveal s1" style="margin: 0 0 28px; font-size: clamp(40px, 5vw, 64px); line-height: 0.95">Hi, I'm Kartikeya.</h2>
+            <p class="reveal s2" style="margin: 0; font-size: 20px; max-width: 580px">I built Creed to train for 70.3 Goa. I wanted one screen that told me exactly where my training stood, with numbers that never pretended to know more than they did.</p>
+            <p class="reveal s3" style="margin: 18px 0 0; color: #5a5a60; max-width: 580px">I use it every day, on my iPhone, synced from my Garmin, through every training block. Now I'm opening it up to every athlete with a date circled.</p>
+            <p class="h reveal s4" style="margin: 28px 0 0; font-size: 26px; font-weight: 500">— Kartikeya</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== Training log + process ===== -->
+      <section id="log" class="wrap" style="padding-top: 140px">
+        <div style="display: flex; flex-wrap: wrap; gap: 32px 80px">
+          <div style="flex: 1 1 300px; min-width: 0">
+            <p class="lbl reveal" style="margin: 0 0 16px">Training log</p>
+            <h2 class="h reveal s1" style="margin: 0; font-size: clamp(40px, 5vw, 64px); line-height: 0.95">What I've built so far</h2>
+            <div class="reveal s2" style="margin-top: 32px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; max-width: 320px">
+              <div><p class="num" style="margin: 0; font-size: 44px; font-weight: 600; line-height: 1">7</p><p style="margin: 4px 0 0; color: #5a5a60; font-size: 14px">metrics, each tested against a worked example</p></div>
+              <div><p class="num" style="margin: 0; font-size: 44px; font-weight: 600; line-height: 1">750+</p><p style="margin: 4px 0 0; color: #5a5a60; font-size: 14px">automated tests</p></div>
+              <div><p class="num" style="margin: 0; font-size: 44px; font-weight: 600; line-height: 1">4</p><p style="margin: 4px 0 0; color: #5a5a60; font-size: 14px">screens: Today, In-Depth, Activities, Food</p></div>
+              <div><p class="num" style="margin: 0; font-size: 44px; font-weight: 600; line-height: 1">₹0</p><p style="margin: 4px 0 0; color: #5a5a60; font-size: 14px">to run, every month</p></div>
+            </div>
+          </div>
+          <ol style="flex: 2 1 520px; min-width: 0; margin: 0; padding: 0; list-style: none">
+            <li class="reveal s1"><span class="rule dark"></span></li>
+            <li class="row reveal s1" style="display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 20px; padding: 22px 0; border-bottom: 1px solid #d9d7d0"><span class="num" style="font-size: 20px; font-weight: 600"><span style="color: #13804f">✓</span> 01</span><div><p style="margin: 0; font-weight: 600">The engine</p><p style="margin: 2px 0 0; color: #5a5a60; font-size: 15px">Garmin sync, the database and seven metrics, each showing its working.</p></div></li>
+            <li class="row reveal s2" style="display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 20px; padding: 22px 0; border-bottom: 1px solid #d9d7d0"><span class="num" style="font-size: 20px; font-weight: 600"><span style="color: #13804f">✓</span> 02</span><div><p style="margin: 0; font-weight: 600">The app</p><p style="margin: 2px 0 0; color: #5a5a60; font-size: 15px">Face ID sign-in, the screens, route maps and haptics. Live on Vercel.</p></div></li>
+            <li class="row reveal s3" style="display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 20px; padding: 22px 0; border-bottom: 1px solid #d9d7d0"><span class="num" style="font-size: 20px; font-weight: 600"><span style="color: #13804f">✓</span> 03</span><div><p style="margin: 0; font-weight: 600">Always in sync</p><p style="margin: 2px 0 0; color: #5a5a60; font-size: 15px">A sync every 30 minutes, a Sync now button, and an importer for your full Garmin history.</p></div></li>
+            <li class="row reveal s4" style="display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 20px; padding: 22px 0; border-bottom: 1px solid #d9d7d0"><span class="num" style="font-size: 20px; font-weight: 600"><span style="color: #13804f">✓</span> 04</span><div><p style="margin: 0; font-weight: 600"><span class="dot" style="background: #a78bfa; margin-right: 8px"></span>The food logger</p><p style="margin: 2px 0 0; color: #5a5a60; font-size: 15px">One-tap meals, a barcode scanner, trends, reminders, CSV, and logging with no signal.</p></div></li>
+            <li class="row reveal s5" style="display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 20px; padding: 22px 0; border-bottom: 1px solid #d9d7d0"><span class="num" style="font-size: 20px; font-weight: 600"><span style="color: #13804f">✓</span> 05</span><div><p style="margin: 0; font-weight: 600">Notifications</p><p style="margin: 2px 0 0; color: #5a5a60; font-size: 15px">Morning Recovery, workout recaps, load-spike warnings and a Sunday summary.</p></div></li>
+            <li class="row reveal s6" style="display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 20px; padding: 22px 0; border-bottom: 1px solid #d9d7d0"><span class="num" style="font-size: 20px; font-weight: 600; color: #d3122a">NEXT</span><div><p style="margin: 0; font-weight: 600">Coming up</p><p style="margin: 2px 0 0; color: #5a5a60; font-size: 15px">A Data Quality page, themes, and a hosted Creed anyone can sign up for.</p></div></li>
+          </ol>
+        </div>
+        <div style="margin-top: 96px">
+          <p class="lbl reveal" style="margin: 0 0 16px">The process</p>
+          <h3 class="h reveal s1" style="margin: 0 0 40px; font-size: clamp(32px, 4vw, 48px); line-height: 1">How every feature gets made</h3>
+          <div class="reveal s1" style="position: relative; height: 1px; background: #0a0a0b"><span class="mover" aria-hidden="true" style="animation-duration: 7s"></span></div>
+          <ol style="margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr))">
+            <li class="reveal s1" style="padding: 26px 24px 26px 0; border-right: 1px solid #d9d7d0"><p class="num" style="margin: 0 0 14px; color: #a9a7a0">01</p><p style="margin: 0 0 4px; font-weight: 600">Train</p><p style="margin: 0; color: #5a5a60; font-size: 15px">It starts with something I miss during my own training.</p></li>
+            <li class="reveal s2" style="padding: 26px 24px; border-right: 1px solid #d9d7d0"><p class="num" style="margin: 0 0 14px; color: #a9a7a0">02</p><p style="margin: 0 0 4px; font-weight: 600">Sketch</p><p style="margin: 0; color: #5a5a60; font-size: 15px">Mockups first. I pick the one that feels right on a phone.</p></li>
+            <li class="reveal s3" style="padding: 26px 24px; border-right: 1px solid #d9d7d0"><p class="num" style="margin: 0 0 14px; color: #a9a7a0">03</p><p style="margin: 0 0 4px; font-weight: 600">Build and test</p><p style="margin: 0; color: #5a5a60; font-size: 15px">Every formula is checked against a worked example.</p></li>
+            <li class="reveal s4" style="padding: 26px 24px; border-right: 1px solid #d9d7d0"><p class="num" style="margin: 0 0 14px; color: #a9a7a0">04</p><p style="margin: 0 0 4px; font-weight: 600">Wear it in</p><p style="margin: 0; color: #5a5a60; font-size: 15px">It runs on my own iPhone before anyone else sees it.</p></li>
+            <li class="reveal s5" style="padding: 26px 0 26px 24px"><p class="num" style="margin: 0 0 14px; color: #d3122a">05</p><p style="margin: 0 0 4px; font-weight: 600">Ship it open</p><p style="margin: 0; color: #5a5a60; font-size: 15px">Pushed to GitHub, for anyone to read and run.</p></li>
+          </ol>
+          <span class="rule"></span>
+        </div>
+      </section>
+
+      <!-- ===== Hosting ===== -->
+      <section id="hosting" class="wrap" style="padding-top: 140px">
+        <div style="display: flex; flex-wrap: wrap; gap: 24px 80px; align-items: flex-end; justify-content: space-between; margin-bottom: 56px">
+          <div>
+            <p class="lbl reveal" style="margin: 0 0 16px">Under the hood</p>
+            <h2 class="h reveal s1" style="margin: 0; font-size: clamp(40px, 5vw, 64px); line-height: 0.95">How it's hosted</h2>
+          </div>
+          <p class="reveal s2" style="margin: 0; max-width: 420px; color: #5a5a60">Every Creed is its own copy, on free accounts you own. This is the path your data takes.</p>
+        </div>
+        <div class="reveal s2" style="position: relative; height: 1px; background: #0a0a0b"><span class="mover" aria-hidden="true"></span></div>
+        <ol class="seq" style="margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr))">
+          <li class="reveal s1" style="padding: 24px 20px 24px 0; border-right: 1px solid #d9d7d0"><p class="num" style="margin: 0 0 12px; color: #a9a7a0; font-size: 15px">01</p><p style="margin: 0 0 4px; font-weight: 600">Garmin watch</p><p style="margin: 0; color: #5a5a60; font-size: 14px">Records every session and night.</p></li>
+          <li class="reveal s2" style="padding: 24px 20px; border-right: 1px solid #d9d7d0"><p class="num" style="margin: 0 0 12px; color: #a9a7a0; font-size: 15px">02</p><p style="margin: 0 0 4px; font-weight: 600">Garmin Connect</p><p style="margin: 0; color: #5a5a60; font-size: 14px">Read through the official Personal API, with your key.</p></li>
+          <li class="reveal s3" style="padding: 24px 20px; border-right: 1px solid #d9d7d0"><p class="num" style="margin: 0 0 12px; color: #a9a7a0; font-size: 15px">03</p><p style="margin: 0 0 4px; font-weight: 600">GitHub Actions</p><p style="margin: 0; color: #5a5a60; font-size: 14px">Starts a sync every 30 minutes.</p></li>
+          <li class="reveal s4" style="padding: 24px 20px; border-right: 1px solid #d9d7d0"><p class="num" style="margin: 0 0 12px; color: #a9a7a0; font-size: 15px">04</p><p style="margin: 0 0 4px; font-weight: 600">Supabase</p><p style="margin: 0; color: #5a5a60; font-size: 14px">Your own Postgres, row-level security on every table.</p></li>
+          <li class="reveal s5" style="padding: 24px 20px; border-right: 1px solid #d9d7d0"><p class="num" style="margin: 0 0 12px; color: #a9a7a0; font-size: 15px">05</p><p style="margin: 0 0 4px; font-weight: 600">Vercel</p><p style="margin: 0; color: #5a5a60; font-size: 14px">Runs the API and web app, plus a daily backup sync.</p></li>
+          <li class="reveal s6" style="padding: 24px 0 24px 20px"><p class="num" style="margin: 0 0 12px; color: #d3122a; font-size: 15px">06</p><p style="margin: 0 0 4px; font-weight: 600">Your iPhone</p><p style="margin: 0; color: #5a5a60; font-size: 14px">Home-screen app, Face ID, push notifications.</p></li>
+        </ol>
+        <span class="rule"></span>
+        <div style="margin-top: 56px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 40px">
+          <div class="reveal s1"><p class="num" style="margin: 0; font-size: 56px; font-weight: 600; line-height: 1">₹0</p><p style="margin: 8px 0 0; color: #5a5a60">a month. Every piece runs on a free plan.</p></div>
+          <div class="reveal s2"><p class="num" style="margin: 0; font-size: 56px; font-weight: 600; line-height: 1">1 : 1</p><p style="margin: 8px 0 0; color: #5a5a60">One copy, one athlete's data. Secrets never reach the browser.</p></div>
+          <div class="reveal s3"><p class="num" style="margin: 0; font-size: 56px; font-weight: 600; line-height: 1">MIT</p><p style="margin: 8px 0 0; color: #5a5a60">Open source. Every formula is readable on <a href="https://github.com/prokp3/creed" class="link" style="background-size: 100% 1px">GitHub</a>.</p></div>
+        </div>
+      </section>
+
+      <!-- ===== Try Creed: the form ===== -->
+      <section id="try" class="topo-d" style="position: relative; overflow: hidden; background-color: #0a0a0b; color: #ffffff; margin-top: 140px; scroll-margin-top: 0">
+        <div class="wrap" style="position: relative; padding-top: 120px; padding-bottom: 120px">
+          <div style="display: flex; flex-wrap: wrap; gap: 40px 80px; align-items: flex-end; justify-content: space-between">
+            <div style="flex: 1 1 480px; min-width: 0">
+              <p class="lbl reveal" style="margin: 0 0 16px; color: #92929c">Try Creed</p>
+              <h2 class="h reveal s1" style="margin: 0; font-size: clamp(48px, 7vw, 104px); line-height: 0.9"><span class="mask"><span>Want in?</span></span><span class="mask"><span>Tell me about you<span style="color: #ff3b47">.</span></span></span></h2>
+              <p class="reveal s2" style="margin: 28px 0 0; max-width: 560px; color: #b9b9c2; font-size: 19px">Fill in a short form: what you're training for, which Garmin you wear, and anything you'd like Creed to do. Leave a review if you've tried it. Add your email and I'll follow up with you personally.</p>
+            </div>
+            <div class="reveal s3" style="display: flex; flex-direction: column; gap: 14px; align-items: flex-start">
+              <a id="form-open" href="#try" data-form class="btn btn-red" style="font-size: 18px" hidden>Open the form <span aria-hidden="true">→</span></a>
+              <p id="form-soon" class="lbl" style="margin: 0; color: #b9b9c2">The sign-up form opens soon</p>
+              <span style="font-size: 14px; color: #92929c">Takes about two minutes. Your email is only used to reply to you.</span>
+            </div>
+          </div>
+          <div class="reveal s3" style="margin-top: 56px"><span class="rule-d"></span></div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 32px; padding-top: 32px">
+            <div class="reveal s1"><p class="num" style="margin: 0 0 10px; color: #ff3b47">01</p><p style="margin: 0 0 4px; font-weight: 600">Tell me your race</p><p style="margin: 0; color: #b9b9c2; font-size: 15px">What you're training for, and when.</p></div>
+            <div class="reveal s2"><p class="num" style="margin: 0 0 10px; color: #ff3b47">02</p><p style="margin: 0 0 4px; font-weight: 600">Leave a review</p><p style="margin: 0; color: #b9b9c2; font-size: 15px">What works, what doesn't, what's missing.</p></div>
+            <div class="reveal s3"><p class="num" style="margin: 0 0 10px; color: #ff3b47">03</p><p style="margin: 0 0 4px; font-weight: 600">Hear back from me</p><p style="margin: 0; color: #b9b9c2; font-size: 15px">I'll reply with answers and help getting set up.</p></div>
+          </div>
+
+          <!-- No form: straight to the setup guide, with a shared tap count -->
+          <div id="dive-in" class="reveal s2" style="margin-top: 80px; border: 1px solid #2a2a30; padding: 40px 32px; display: flex; flex-wrap: wrap; gap: 32px 64px; align-items: center; justify-content: space-between">
+            <div style="flex: 1 1 420px; min-width: 0">
+              <p class="lbl" style="margin: 0 0 14px; color: #92929c">Or skip the form</p>
+              <h3 class="h" style="margin: 0; font-size: clamp(36px, 4.5vw, 60px); line-height: 0.95">Rather just dive in<span style="color: #ff3b47">?</span></h3>
+              <p style="margin: 18px 0 0; max-width: 520px; color: #b9b9c2">Go straight to the step-by-step guide and set up your own Creed. No form, no email. It's free and takes about an hour.</p>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 18px; align-items: flex-start">
+              <a id="try-now" href="https://github.com/prokp3/creed#run-your-own-creed" target="_blank" rel="noopener" class="btn btn-red" style="font-size: 18px">Try Creed now <span aria-hidden="true">→</span></a>
+              <p style="margin: 0; display: flex; align-items: baseline; gap: 12px" aria-live="polite">
+                <span id="try-count" class="num" style="font-size: 56px; font-weight: 600; line-height: 1; color: #ffffff">–</span>
+                <span id="try-count-label" style="color: #b9b9c2; font-size: 15px; max-width: 180px">athletes have tapped this</span>
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== Finish ===== -->
+      <section id="finish" class="wrap" style="padding-top: 160px; padding-bottom: 140px">
+        <div class="reveal"><span class="rule dark"></span></div>
+        <div style="display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-end; justify-content: space-between; padding-top: 48px">
+          <h2 class="h reveal s1" style="margin: 0; font-size: clamp(52px, 8vw, 120px); line-height: 0.88"><span class="mask"><span>See you at</span></span><span class="mask"><span>the finish<span style="color: #d3122a">.</span></span></span></h2>
+          <div class="reveal s2" style="display: flex; flex-direction: column; gap: 14px; align-items: flex-start">
+            <a href="#try" data-form class="btn btn-red" style="font-size: 18px">Try Creed <span aria-hidden="true">→</span></a>
+            <a href="#countdown" class="link" style="font-weight: 500">Set your race countdown</a>
+            <span style="font-size: 14px; color: #5a5a60">Free and open source. For Garmin and iPhone.</span>
+          </div>
+        </div>
+      </section>
+
+      <footer style="border-top: 1px solid #d9d7d0">
+        <div class="wrap" style="padding-top: 28px; padding-bottom: 40px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; font-size: 13px; color: #5a5a60">
+          <span style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+            <svg viewBox="0 0 1024 1024" width="20" height="20" aria-hidden="true"><path d="M706 336 A262 262 0 1 0 706 688" fill="none" stroke="#0a0a0b" stroke-width="96" stroke-linecap="round"></path><circle cx="773" cy="512" r="64" fill="#d3122a"></circle></svg>
+            <span class="h" style="font-weight: 700; letter-spacing: 0.14em; color: #0a0a0b; font-size: 16px">CREED</span> · by Kartikeya · © <span id="year">2026</span>
+            · <a href="https://github.com/prokp3/creed" class="link" style="color: #5a5a60">GitHub</a>
+            · <a href="/" class="link" style="color: #5a5a60">Sign in</a>
+          </span>
+          <span style="max-width: 620px">Independent; not affiliated with, endorsed by or sponsored by Garmin or The IRONMAN Group. Garmin, IRONMAN and 70.3 are trademarks of their owners.</span>
+        </div>
+      </footer>
+    </div>
+  </body>
+</html>

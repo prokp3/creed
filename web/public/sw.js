@@ -26,6 +26,10 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET' || url.origin !== self.location.origin || url.pathname.startsWith('/api/')) {
     return;
   }
+  // The public homepage isn't part of the app: leave it to the network so it's never saved as the app's page.
+  if (url.pathname.startsWith('/welcome')) {
+    return;
+  }
   if (event.request.mode === 'navigate') {
     // The newest page when online, the saved one when not.
     event.respondWith(

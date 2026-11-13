@@ -67,6 +67,27 @@ class TestAccess:
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
 
+    def test_the_try_counter_starts_at_zero_and_needs_no_session(self, client):
+        response = client.get("/api/public/try")
+        assert response.status_code == 200
+        assert response.json() == {"count": 0}
+
+    def test_each_try_tap_adds_one_and_shares_only_the_total(self, client):
+        assert client.post("/api/public/try").json() == {"count": 1}
+        assert client.post("/api/public/try").json() == {"count": 2}
+        assert client.get("/api/public/try").json() == {"count": 2}
+
+    def test_the_try_counter_is_not_a_setting(self, client, store):
+        client.post("/api/public/try")
+        settings = client.get("/api/settings", headers=AUTH).json()
+        assert "welcome_try_clicks" not in json.dumps(settings)
+
+    def test_another_site_cannot_tap_the_try_counter(self, client, monkeypatch):
+        monkeypatch.setenv(auth.ORIGIN_ENV_VAR, "https://creed.example")
+        response = client.post("/api/public/try", headers={"Origin": "https://evil.example"})
+        assert response.status_code == 403
+        assert client.get("/api/public/try").json() == {"count": 0}
+
     def test_api_docs_are_not_published(self, client):
         for route in ("/docs", "/redoc", "/openapi.json"):
             assert client.get(route).status_code == 404
