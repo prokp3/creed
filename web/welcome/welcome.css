@@ -34,11 +34,11 @@ img, svg { display: block; }
 .wrap { max-width: 1200px; margin: 0 auto; padding-left: 32px; padding-right: 32px; }
 @media (max-width: 600px) { .wrap { padding-left: 16px; padding-right: 16px; } }
 
-/* Texture: film grain over everything, contour lines in the background. */
-.grain { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 30; opacity: 0.2; mix-blend-mode: overlay; }
+/* Texture: a small grain tile and contour lines, painted once as backgrounds. (A live noise filter blended over the
+   whole screen looked the same but made phones repaint everything while scrolling.) */
 .page { position: relative; isolation: isolate; overflow-x: clip; background-color: var(--paper); }
-.topo { background-image: repeating-radial-gradient(circle at 88% 6%, rgba(10,10,11,0) 0 34px, rgba(10,10,11,.05) 34px 35px), repeating-radial-gradient(circle at 4% 48%, rgba(10,10,11,0) 0 42px, rgba(10,10,11,.035) 42px 43px); }
-.topo-d { background-image: repeating-radial-gradient(circle at 92% 0%, rgba(255,255,255,0) 0 34px, rgba(255,255,255,.045) 34px 35px), repeating-radial-gradient(circle at 0% 100%, rgba(255,255,255,0) 0 42px, rgba(255,255,255,.03) 42px 43px); }
+.topo { background-image: url('./grain.png'), repeating-radial-gradient(circle at 88% 6%, rgba(10,10,11,0) 0 34px, rgba(10,10,11,.05) 34px 35px), repeating-radial-gradient(circle at 4% 48%, rgba(10,10,11,0) 0 42px, rgba(10,10,11,.035) 42px 43px); background-size: 128px 128px, auto, auto; }
+.topo-d { background-image: url('./grain.png'), repeating-radial-gradient(circle at 92% 0%, rgba(255,255,255,0) 0 34px, rgba(255,255,255,.045) 34px 35px), repeating-radial-gradient(circle at 0% 100%, rgba(255,255,255,0) 0 42px, rgba(255,255,255,.03) 42px 43px); background-size: 128px 128px, auto, auto; }
 
 /* The logo behind the whole page, turning as you scroll where the browser supports it. */
 .wm { position: fixed; top: 50%; right: -16vw; width: min(1200px, 95vw); height: auto; transform: translateY(-50%) rotate(-12deg); z-index: -1; pointer-events: none; }
@@ -143,6 +143,19 @@ img, svg { display: block; }
 @keyframes nudge { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(5px); } }
 @keyframes lit { 0%, 14% { color: var(--red); } 22%, 100% { color: var(--ink-4); } }
 @keyframes spinslow { to { transform: rotate(360deg); } }
+
+/* Phones and tablets: keep the motion that's cheap (fades, slides, the ticker) and drop what makes Safari repaint
+   large areas on every scroll frame: the logo pinned to the screen and turning with the scroll, the slowly spinning
+   logo in Privacy, and the landing screen fading as it scrolls away. */
+@media (hover: none) and (pointer: coarse) {
+  .wm { position: absolute; top: 1100px; transform: rotate(-12deg); animation: none !important; }
+  .spin-slow, .intro-out { animation: none !important; }
+  .ticker, .mover, .tick { will-change: transform; }
+  .motion .reveal { transition-duration: .7s; }
+  .row:hover, .pcell:hover { background-color: transparent; }
+  .row:hover::before { width: 0; }
+  .row:hover .num, .rules li:hover .h { transform: none; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
