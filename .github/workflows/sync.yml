@@ -38,6 +38,7 @@ jobs:
           echo "Sync finished: $status"
           case "$status" in
             ok) ;;
+            skipped) echo "No watch connected, so there was nothing to sync. Reminders still went out." ;;
             partial) echo "::warning::Part of the sync didn't finish. The next run tries again." ;;
             *) echo "::error::The sync didn't work. Creed shows the reason."; exit 1 ;;
           esac

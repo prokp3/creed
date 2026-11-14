@@ -50,7 +50,7 @@ class TestDataSource:
 
     def test_a_typo_stops_rather_than_syncing_the_wrong_place(self, monkeypatch):
         monkeypatch.setenv(config.DATA_SOURCE_ENV_VAR, "strava")
-        with pytest.raises(RuntimeError, match="garmin or intervals"):
+        with pytest.raises(RuntimeError, match="garmin, intervals or none"):
             config.data_source()
 
     def test_the_athlete_id_defaults_to_the_keys_own(self, monkeypatch):
@@ -409,3 +409,29 @@ class TestCheckTool:
             monkeypatch.setenv(BASE_URL_ENV_VAR, server.url)
             assert intervals_check.main() == 2
         assert "Key problem" in capsys.readouterr().out
+
+
+class TestNoWatch:
+    def test_none_is_a_valid_source(self, monkeypatch):
+        monkeypatch.setenv(config.DATA_SOURCE_ENV_VAR, "none")
+        assert config.data_source() == "none" and config.source_label() == "No watch"
+
+    def test_syncing_is_skipped_and_nothing_is_recorded_as_failed(self, store, database_url, monkeypatch):
+        from fastapi.testclient import TestClient
+
+        from creed import auth
+        from creed.api import app as api_module
+
+        monkeypatch.setenv("DATABASE_URL", database_url)
+        monkeypatch.setenv("CRON_SECRET", "test-cron")
+        monkeypatch.setenv(config.DATA_SOURCE_ENV_VAR, "none")
+        auth.save_dev_session(store.conn, "test-session-token")
+        store.commit()
+        client = TestClient(api_module.app, headers={"Cookie": f"{auth.SESSION_COOKIE}=test-session-token"})
+        assert client.post("/api/sync").json()["status"] == "skipped"
+        cron = client.post("/api/cron/sync", headers={"Authorization": "Bearer test-cron"}).json()
+        assert cron["status"] == "skipped"
+        assert count(store, "sync_run") == 0
+        today = client.get("/api/today").json()
+        assert today["garmin"]["source"] == "none"
+        assert client.get("/api/settings").json()["data_source"]["key"] == "none"

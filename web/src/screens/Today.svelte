@@ -78,6 +78,7 @@
     if (run && ['failed', 'auth_failed'].includes(run.status)) {
       return { text: run.status === 'auth_failed' ? `${source} key problem` : 'Sync failed', attention: true };
     }
+    if (data.garmin.source === 'none') return { text: 'No watch connected', attention: false };
     if (!good) return { text: 'Not synced yet', attention: false };
     const day = zonedDate(good, zone);
     return {

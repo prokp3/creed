@@ -33,7 +33,9 @@
   const data = $derived(res.data);
   // Where the data comes from: Garmin, or intervals.icu for other watches. The server names it.
   const source = $derived(data?.garmin.tag ?? 'Garmin');
-  const sections = $derived(SECTION_LIST.map(([id, label]) => [id, label ?? source]));
+  // With no watch there's no source section to show.
+  const noWatch = $derived(source === 'No watch');
+  const sections = $derived(SECTION_LIST.filter(([id]) => !(noWatch && id === 'garmin')).map(([id, label]) => [id, label ?? source]));
 
   $effect(() => {
     freshness;
@@ -296,6 +298,7 @@
         <WhyPanel why={data.load.why} confidence={data.load.confidence} />
       </section>
 
+      {#if !noWatch}
       <section id="garmin" class="gutter stack">
         <h2 class="page-heading">{source}</h2>
         {#if garminTiles.length}
@@ -312,6 +315,7 @@
           <p class="note">Nothing from {source} in the last two days.</p>
         {/if}
       </section>
+      {/if}
 
       <section id="aerobic" class="gutter stack">
         <h2 class="page-heading">Aerobic efficiency</h2>

@@ -32,18 +32,20 @@ def database_url() -> str:
 
 
 # Where the training data comes from. Garmin is read directly. Everything else (COROS, Polar, Suunto, Wahoo and more)
-# arrives through intervals.icu, which those watches already sync to.
+# arrives through intervals.icu, which those watches already sync to. With none, there's no watch: the countdown, food
+# logging and reminders still work, and syncing is skipped rather than failing.
 DATA_SOURCE_ENV_VAR = "CREED_DATA_SOURCE"
 GARMIN = "garmin"
 INTERVALS = "intervals"
-SOURCE_LABELS = {GARMIN: "Garmin", INTERVALS: "intervals.icu"}
+NONE = "none"
+SOURCE_LABELS = {GARMIN: "Garmin", INTERVALS: "intervals.icu", NONE: "No watch"}
 
 
 def data_source() -> str:
-    """garmin unless CREED_DATA_SOURCE says intervals. A typo stops the app rather than quietly syncing the wrong place."""
+    """garmin unless CREED_DATA_SOURCE says intervals or none. A typo stops the app rather than syncing the wrong place."""
     value = os.environ.get(DATA_SOURCE_ENV_VAR, "").strip().lower() or GARMIN
     if value not in SOURCE_LABELS:
-        raise RuntimeError(f"{DATA_SOURCE_ENV_VAR} must be garmin or intervals, not {value!r}.")
+        raise RuntimeError(f"{DATA_SOURCE_ENV_VAR} must be garmin, intervals or none, not {value!r}.")
     return value
 
 

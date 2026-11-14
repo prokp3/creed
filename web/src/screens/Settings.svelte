@@ -18,8 +18,9 @@
   let savedTimer;
 
   const s = $derived(res.data);
-  // intervals.icu keys never expire, so there's no expiry date to keep or warn about.
-  const intervals = $derived(s?.data_source?.key === 'intervals');
+  // Only a Garmin key expires. intervals.icu keys don't, and with no watch there's no key at all.
+  const sourceKey = $derived(s?.data_source?.key ?? 'garmin');
+  const intervals = $derived(sourceKey !== 'garmin');
   const supported = pushSupport();
   let subscribed = $state(false);
   let pushBusy = $state(false);
@@ -240,9 +241,13 @@
           <div class="list-block">
             <div class="list-inner">
               <span>Synced from</span>
-              <span class="note">intervals.icu</span>
+              <span class="note">{s.data_source.label}</span>
             </div>
-            <p class="note">Creed reads your watch's data from intervals.icu with your API key, which doesn't expire. Body Battery, stress and Garmin's training effects are Garmin's own, so they don't appear.</p>
+            {#if sourceKey === 'none'}
+              <p class="note">No watch is connected, so nothing syncs. The race countdown, food logging, targets and reminders all work. To add a watch later, set CREED_DATA_SOURCE to garmin or intervals in Vercel and add its key.</p>
+            {:else}
+              <p class="note">Creed reads your watch's data from intervals.icu with your API key, which doesn't expire. Body Battery, stress and Garmin's training effects are Garmin's own, so they don't appear.</p>
+            {/if}
           </div>
         </div>
       </section>

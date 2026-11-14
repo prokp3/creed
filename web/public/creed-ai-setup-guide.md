@@ -48,7 +48,8 @@ secret** and a **recovery code**.
 
 ## What they need
 
-- A Garmin watch that syncs to Garmin Connect, or another watch that syncs to intervals.icu (free)
+- A Garmin watch that syncs to Garmin Connect, or another watch that syncs to intervals.icu (free). No watch is fine
+  too: see 2c.
 - A phone (iPhone recommended)
 - Free accounts: GitHub (https://github.com), Supabase (https://supabase.com), Vercel (https://vercel.com)
 - On their computer: Python 3.12 or newer (https://www.python.org/downloads/), Node.js 22 (https://nodejs.org)
@@ -89,7 +90,7 @@ Worked: a `creed` folder with `README.md` inside. **Every later command runs fro
 
 ## Step 2: Connect their watch
 
-Ask which watch they wear, then follow **2a** for Garmin or **2b** for anything else.
+Ask which watch they wear, then follow **2a** for Garmin, **2b** for any other watch, or **2c** if they have none.
 
 ### 2a: Garmin
 
@@ -115,6 +116,14 @@ Tell them what to expect: workouts with maps and heart rate, sleep length and sc
 all come across. Body Battery, stress, sleep stages and Garmin's training effects only exist with Garmin. Activities
 that reached intervals.icu from Strava can't be passed on to other apps, so the watch should connect to intervals.icu
 directly. If they wear a Garmin, steer them to 2a: Garmin is limiting what intervals.icu can share with other apps.
+
+### 2c: No watch
+
+Nothing to create. In step 3 they add `CREED_DATA_SOURCE=none` to `.env`, and in step 5 the same in Vercel. Tell them
+what they get: the race countdown, food logging with the barcode scanner, training and rest day targets (they mark
+each day by hand on the Food screen), trends and reminders. Recovery, sleep, fitness and maps need a watch; they can
+add one later by changing `CREED_DATA_SOURCE` and adding its key. Skip `python -m creed.sync` in step 4: there's
+nothing to sync.
 
 ## Step 3: Create the database
 
@@ -181,7 +190,7 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"
 |---|---|
 | `DATABASE_URL` | The Supabase Transaction pooler string from step 3 |
 | `GARMIN_PERSONAL_API_KEY` | Their Garmin key (2a only) |
-| `CREED_DATA_SOURCE` | `intervals` (2b only; leave it out for Garmin) |
+| `CREED_DATA_SOURCE` | `intervals` for 2b, `none` for 2c. Leave it out for Garmin. |
 | `INTERVALS_API_KEY` | Their intervals.icu API key (2b only) |
 | `CREED_ORIGIN` | Their address from step 5.3, starting `https://`, no slash at the end |
 | `CREED_SETUP_SECRET` | The setup secret |

@@ -222,6 +222,7 @@ def today_screen(_: OwnerSession, conn: Conn) -> dict[str, Any]:
     last_night = next((n for n in ctx.sleep if n.day == ctx.today), None)
     garmin = {
         "tag": config.source_label(),
+        "source": config.data_source(),
         "body_battery": latest.get("body_battery_latest"),
         "stress": latest.get("stress_avg"),
         "sleep_score": last_night.score if last_night else None,
@@ -328,6 +329,8 @@ async def put_settings(request: Request, session: OwnerSession, conn: Conn) -> d
 
 
 def _sync(conn: psycopg.Connection, trigger: str) -> dict[str, Any]:
+    if config.data_source() == config.NONE:
+        return {"status": "skipped", "message": "No watch is connected, so there's nothing to sync."}
     if config.data_source() == config.INTERVALS:
         return _sync_intervals(conn, trigger)
     saved = app_settings.load(conn)
