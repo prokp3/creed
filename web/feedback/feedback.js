@@ -6,6 +6,9 @@ import '@fontsource/barlow-condensed/600.css';
 import '@fontsource/barlow-condensed/700.css';
 import '../welcome/welcome.css';
 import './feedback.css';
+import { inject } from '@vercel/analytics';
+
+inject();
 
 const $ = (id) => document.getElementById(id);
 const form = $('feedback-form');
