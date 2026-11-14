@@ -6,6 +6,9 @@ import '@fontsource/barlow-condensed/500.css';
 import '@fontsource/barlow-condensed/600.css';
 import '@fontsource/barlow-condensed/700.css';
 import './welcome.css';
+import { inject } from '@vercel/analytics';
+
+inject();
 
 // "Try Creed" opens the site's own Try page, which passes the answers to the creator's Google Form. Without the
 // script the buttons scroll to the Try section instead.
