@@ -24,6 +24,10 @@ const DISTANCES = {
   half: [1.9, 90, 21.1],
   full: [3.8, 180, 42.2],
 };
+// A first-time visitor sees a countdown already running, to a made-up race 8 to 40 weeks away with a typical
+// early start. It's labelled as an example and isn't saved, so it changes each visit until they set their own.
+const EXAMPLE_WEEKS = [8, 40];
+const EXAMPLE_STARTS = ['05:45', '06:00', '06:15', '06:30', '06:45', '07:00', '07:15', '07:30'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 const $ = (id) => document.getElementById(id);
@@ -63,6 +67,17 @@ function target() {
   return Number.isNaN(when.getTime()) ? null : when;
 }
 
+function setExampleRace() {
+  const [low, high] = EXAMPLE_WEEKS;
+  const days = low * 7 + Math.floor(Math.random() * (high - low) * 7);
+  const when = new Date();
+  when.setDate(when.getDate() + days);
+  dateInput.value = `${when.getFullYear()}-${pad(when.getMonth() + 1)}-${pad(when.getDate())}`;
+  timeInput.value = EXAMPLE_STARTS[Math.floor(Math.random() * EXAMPLE_STARTS.length)];
+}
+
+let isExample = false;
+
 function showDistances() {
   const [swim, bike, run] = DISTANCES[distInput.value] || DISTANCES.half;
   $('dist-swim').textContent = swim;
@@ -93,11 +108,13 @@ function render() {
   parts.m.textContent = pad(m);
   parts.s.textContent = pad(s);
   const dateText = `${pad(when.getDate())} ${MONTHS[when.getMonth()]} ${when.getFullYear()}`;
-  label.textContent = when - Date.now() > 0 ? `Race day · ${dateText}` : `Race day · ${dateText} · Go get it`;
+  if (isExample) label.textContent = `Example race · ${dateText} · Change it to yours`;
+  else label.textContent = when - Date.now() > 0 ? `Race day · ${dateText}` : `Race day · ${dateText} · Go get it`;
   tick.classList.toggle('idle', when - Date.now() <= 0);
 }
 
 function remember() {
+  isExample = false;
   save({ date: dateInput.value, time: timeInput.value, dist: distInput.value });
   showDistances();
   render();
@@ -112,6 +129,10 @@ if (saved && typeof saved === 'object') {
   if (typeof saved.date === 'string') dateInput.value = saved.date;
   if (typeof saved.time === 'string' && saved.time) timeInput.value = saved.time;
   if (saved.dist in DISTANCES) distInput.value = saved.dist;
+}
+if (!dateInput.value) {
+  setExampleRace();
+  isExample = true;
 }
 for (const input of [dateInput, timeInput, distInput]) input.addEventListener('input', remember);
 showDistances();
