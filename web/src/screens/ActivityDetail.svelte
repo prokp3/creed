@@ -19,7 +19,7 @@
   const LOAD_METHOD = {
     samples: 'Heart-rate reserve, from every recorded sample',
     average: 'Heart-rate reserve, from average HR',
-    swim: 'Duration, distance and pace. Wrist HR is not used for swims',
+    swim: 'Duration, distance and pace, as no heart rate was recorded',
     none: "Couldn't be worked out",
   };
 

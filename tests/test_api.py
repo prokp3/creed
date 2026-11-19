@@ -239,7 +239,7 @@ class TestActivities:
         assert run["load"] > 0
         assert run["load_method"] == "samples"
         assert swim["load"] > 0
-        assert swim["load_method"] == "swim"
+        assert swim["load_method"] == "samples"  # its FIT file has heart rate, so it shares the run scale
 
     def test_the_load_curve_changes_each_activitys_load(self, synced):
         def first_run():

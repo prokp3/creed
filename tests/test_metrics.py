@@ -78,13 +78,35 @@ class TestSwimLoad:
         ]
         assert strain.swim_threshold_speed(swims) == pytest.approx(1.0)
 
-    def test_swim_load_ignores_heart_rate(self):
+    def test_a_swim_with_heart_rate_uses_trimp_like_a_run(self):
+        # Same scale as run and bike, so a swim's share of the week reflects effort, not distance.
         params = hr_params.HrParams(190, "", 50, "")
-        slow_hr = run(discipline="swim", distance_m=1500, duration_seconds=1800, avg_hr=90.0)
-        high_hr = run(discipline="swim", distance_m=1500, duration_seconds=1800, avg_hr=180.0,
-                      hr_seconds={180: 1800})
-        assert strain.activity_load(slow_hr, params, 1.0, "male") == strain.activity_load(high_hr, params, 1.0, "male")
-        assert strain.activity_load(slow_hr, params, 1.0, "male")[1] == "swim"
+        swim = run(discipline="swim", distance_m=1500, duration_seconds=1800, avg_hr=150.0, hr_seconds={150: 1800})
+        same_run = run(distance_m=5000, duration_seconds=1800, avg_hr=150.0, hr_seconds={150: 1800})
+        load, method = strain.activity_load(swim, params, 1.0, "male")
+        assert method == "samples"
+        assert load == pytest.approx(strain.activity_load(same_run, params, 1.0, "male")[0])
+
+    def test_pool_rests_dont_shrink_a_swim_with_heart_rate(self):
+        # 850 m in 42 min with long rests: pace says almost nothing, heart rate says a real session.
+        params = hr_params.HrParams(199, "", 57, "")
+        swim = run(discipline="swim", distance_m=850, duration_seconds=2507, avg_hr=133.0)
+        load, method = strain.activity_load(swim, params, 1.02, "male")
+        assert method == "average"
+        assert load > 30
+        assert strain.swim_load(2507, 850, 1.02) < 5
+
+    def test_a_swim_without_heart_rate_falls_back_to_pace(self):
+        params = hr_params.HrParams(190, "", 50, "")
+        swim = run(discipline="swim", distance_m=1500, duration_seconds=1800, avg_hr=None, max_hr=None)
+        load, method = strain.activity_load(swim, params, 1.0, "male")
+        assert method == "swim"
+        assert load == pytest.approx(28.94, abs=0.01)
+
+    def test_a_swim_with_hr_still_scores_before_max_hr_is_known_by_pace(self):
+        params = hr_params.HrParams(None, "", None, "")
+        swim = run(discipline="swim", distance_m=1500, duration_seconds=1800, avg_hr=150.0)
+        assert strain.activity_load(swim, params, 1.0, "male")[1] == "swim"
 
 
 class TestHrParams:
@@ -149,8 +171,14 @@ class TestStrainMetric:
         assert strain.compute(self.full_ctx(today=[run(activity_id=5, flagged=True)])).value == 0
 
     def test_few_swims_lower_confidence(self):
-        swim = run(activity_id=6, discipline="swim", distance_m=1500, duration_seconds=1800)
+        # Only a pace-scored swim leans on the threshold estimate, so only it needs several swims.
+        swim = run(activity_id=6, discipline="swim", distance_m=1500, duration_seconds=1800, avg_hr=None)
         assert strain.compute(self.full_ctx(today=[swim])).confidence == "low"
+
+    def test_a_swim_scored_from_heart_rate_is_medium_confidence(self):
+        swim = run(activity_id=6, discipline="swim", distance_m=1500, duration_seconds=1800,
+                   hr_seconds={150: 1800})
+        assert strain.compute(self.full_ctx(today=[swim])).confidence == "medium"
 
 
 class TestFitnessModel:

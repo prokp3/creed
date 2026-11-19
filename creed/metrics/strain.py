@@ -6,11 +6,16 @@ Run, bike and other HR-tracked activities use Banister's TRIMP, from heart-rate 
     Banister EW (1991), "Modeling elite athletic performance", in Physiological Testing of the
     High-Performance Athlete.
 
-Swims don't use wrist HR, which is unreliable in water. They use duration and pace:
+Swims use the same TRIMP when the watch recorded heart rate, so a swim's load sits on the same
+scale as a run's or a ride's and the sports can be compared. Wrist HR in water is noisier than on
+land, so a day with a swim is never rated high confidence.
+
+A swim with no heart rate falls back to duration and pace:
     load = (speed / threshold speed)^3 x hours x 100
     This is the swim TSS formula published by TrainingPeaks. Threshold speed is estimated from
     your own best sustained swim. It isn't peer reviewed, and its units only roughly line up
-    with TRIMP, which the UI says.
+    with TRIMP. It was the only swim method once, but pool rests count as time, so it rated
+    real swims at a tenth of what heart rate and Garmin's own load say.
 """
 from __future__ import annotations
 
@@ -28,12 +33,14 @@ FEW_SWIMS = 5
 HOME_RING_REFERENCE_DAYS = 90
 
 WHY = Why(
-    formula="Run and bike: Banister TRIMP from heart-rate reserve. Swim: (speed / threshold speed)^3 x hours x 100, "
-            "with no wrist HR.",
-    inputs="Seconds at each heart rate from the FIT file, or average HR if that's missing. Swim duration and distance.",
+    formula="Banister TRIMP from heart-rate reserve, for every sport, so they share one scale. A swim with no "
+            "heart rate uses (speed / threshold speed)^3 x hours x 100.",
+    inputs="Seconds at each heart rate from the FIT file, or average HR if that's missing. Swim duration and "
+           "distance when there's no HR.",
     window="One day, split by discipline.",
     citation="Banister 1991 (TRIMP). TrainingPeaks swim TSS formula, which isn't peer reviewed.",
-    note="Swim units only roughly line up with TRIMP. Whoop's strain algorithm is proprietary and isn't replicated.",
+    note="Wrist HR in water is noisier than on land. Swims scored from pace only roughly line up with TRIMP. "
+         "Whoop's strain algorithm is proprietary and isn't replicated.",
 )
 
 
@@ -73,16 +80,13 @@ def swim_threshold_speed(activities: list[ActivityRecord]) -> float | None:
 
 def activity_load(a: ActivityRecord, params: HrParams, threshold: float | None, curve: str) -> tuple[float | None, str]:
     """An activity's load and the method used. None means it can't be worked out, and it stays out."""
-    if a.discipline == "swim":
-        if threshold and a.duration_seconds and a.distance_m:
-            return swim_load(a.duration_seconds, a.distance_m, threshold), "swim"
-        return None, "none"
-    if params.max_hr is None or params.resting_hr is None or params.max_hr <= params.resting_hr:
-        return None, "none"
-    if a.hr_seconds:
+    hr_ok = params.max_hr is not None and params.resting_hr is not None and params.max_hr > params.resting_hr
+    if hr_ok and a.hr_seconds:
         return trimp_from_histogram(a.hr_seconds, params.resting_hr, params.max_hr, curve), "samples"
-    if a.avg_hr and a.duration_seconds:
+    if hr_ok and a.avg_hr and a.duration_seconds:
         return trimp_from_average(a.duration_seconds / 60, a.avg_hr, params.resting_hr, params.max_hr, curve), "average"
+    if a.discipline == "swim" and threshold and a.duration_seconds and a.distance_m:
+        return swim_load(a.duration_seconds, a.distance_m, threshold), "swim"
     return None, "none"
 
 
@@ -116,6 +120,7 @@ def compute(ctx: MetricContext) -> MetricResult:
     today = [a for a in counted(ctx.activities) if a.day == ctx.today]
     by_discipline: dict[str, float] = {}
     methods = set()
+    swam = False
     skipped = 0
     for a in today:
         load, method = activity_load(a, params, threshold, ctx.settings.trimp_curve)
@@ -124,11 +129,12 @@ def compute(ctx: MetricContext) -> MetricResult:
             continue
         by_discipline[a.discipline] = by_discipline.get(a.discipline, 0.0) + load
         methods.add(method)
+        swam = swam or a.discipline == "swim"
 
     swims = sum(1 for a in ctx.activities if a.discipline == "swim" and not a.flagged)
     if skipped or "swim" in methods and swims < FEW_SWIMS:
         confidence = "low"
-    elif "average" in methods or "swim" in methods:
+    elif "average" in methods or swam:
         confidence = "medium"
     else:
         confidence = "high"
