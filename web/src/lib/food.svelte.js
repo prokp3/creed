@@ -31,7 +31,8 @@ let retryTimer = null;
 let started = false;
 
 const now = () => new Date().toISOString();
-const isEntryChange = (change) => ['save', 'delete', 'delete-groups', 'day-type'].includes(change.kind);
+// Changes to one day, read back with that day. The rest change the library.
+const isEntryChange = (change) => ['save', 'delete', 'delete-groups', 'day-type', 'supplement-taken'].includes(change.kind);
 
 // ---------------------------------------------------------------- saved on the phone
 
@@ -168,6 +169,8 @@ function emptyDay(date) {
     incomplete: [],
     rings: [],
     meals: [],
+    supplements_taken: [],
+    supplements_week: {},
     balance: { tag: 'Garmin', estimate: true, so_far: date === F.localDate(), eaten_kcal: 0, burned_kcal: null, net_kcal: null },
   };
 }
@@ -211,6 +214,13 @@ export function dayView(date) {
     totals: sums,
     progress: F.progress(nutrients, sums, targetSet),
     targetSet,
+    // A day kept on the phone from before schedules existed has only its own ticks.
+    supplementDay: F.supplementsDay(
+      lib?.supplements,
+      data.supplements_week ?? { [date]: data.supplements_taken ?? [] },
+      changes,
+      date,
+    ),
     balance: { ...data.balance, eaten_kcal: eaten, net_kcal: burned === null ? null : eaten - burned },
   };
 }
@@ -388,6 +398,15 @@ export function setDayType(date, value) {
   );
 }
 
+/** Tick a supplement off for a day, or untick it. By day, not by time. */
+export function setSupplementTaken(date, supplement, taken) {
+  return commit(
+    { kind: 'supplement-taken', date, id: supplement.id, taken },
+    [{ type: 'supplement.taken', supplement_id: supplement.id, date, taken, changed_at: now() }],
+    [date],
+  );
+}
+
 // ---------------------------------------------------------------- the library
 
 export function saveFood(record, message = null) {
@@ -465,6 +484,18 @@ export function deleteNutrient(record) {
 
 export function saveSettings(record) {
   commit({ kind: 'settings-save', record }, [{ type: 'settings.save', record, changed_at: now() }]);
+}
+
+export function saveSupplement(record) {
+  commit({ kind: 'supplement-save', record }, [{ type: 'supplement.save', record, changed_at: now() }]);
+}
+
+/** Days it was ticked stay saved on the server. Undo adds it back as a new one (a deleted id stays deleted). */
+export function deleteSupplement(record) {
+  commit({ kind: 'supplement-delete', id: record.id }, [{ type: 'supplement.delete', id: record.id, changed_at: now() }]);
+  showToast(`${record.name} removed`, {
+    undo: () => saveSupplement({ id: F.newId(), name: record.name, dose: record.dose, sort_order: record.sort_order }),
+  });
 }
 
 /** After an import, read everything back. */

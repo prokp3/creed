@@ -664,6 +664,122 @@ def day_types(conn: psycopg.Connection, user_id: str, start: date, end: date,
     return days
 
 
+# ---------------------------------------------------------------- supplements
+
+MAX_SUPPLEMENTS = 30
+WEEKDAYS = range(7)  # 0 is Monday, as Python's date.weekday() counts.
+
+
+def clean_schedule(value: Any) -> dict[str, Any]:
+    """How often a supplement is taken: every day, on certain weekdays, or a number of times a week on any days."""
+    if value is None:
+        return {"kind": "daily"}
+    if not isinstance(value, Mapping):
+        raise InvalidFood("Choose how often you take it.")
+    kind = value.get("kind")
+    if kind == "daily":
+        return {"kind": "daily"}
+    if kind == "days":
+        days = value.get("days")
+        if (not isinstance(days, list) or not days
+                or not all(isinstance(d, int) and not isinstance(d, bool) and d in WEEKDAYS for d in days)):
+            raise InvalidFood("Choose at least one day of the week.")
+        days = sorted(set(days))
+        return {"kind": "daily"} if len(days) == 7 else {"kind": "days", "days": days}
+    if kind == "weekly":
+        times = value.get("times")
+        if isinstance(times, bool) or not isinstance(times, int) or not 1 <= times <= 6:
+            raise InvalidFood("A few times a week means 1 to 6 times.")
+        return {"kind": "weekly", "times": times}
+    raise InvalidFood("Choose how often you take it.")
+
+
+@_for_user
+def save_supplement(conn: psycopg.Connection, user_id: str, record: Mapping[str, Any], changed_at: datetime) -> str:
+    """Add a supplement you take every day, or change its name or dose."""
+    if not isinstance(record, Mapping):
+        raise InvalidFood("A supplement needs a name.")
+    supplement_id = _id(record.get("id"), "Supplement")
+    name = _text(record.get("name"), "Name", 40)
+    dose = _text(record.get("dose"), "Dose", 40, optional=True)
+    schedule = clean_schedule(record.get("schedule"))
+    clash = conn.execute(
+        "select 1 from supplement where user_id = %s and deleted_at is null and lower(name) = lower(%s) and id <> %s",
+        (user_id, name, supplement_id),
+    ).fetchone()
+    if clash:
+        raise InvalidFood(f"You already have {name} in your supplements.")
+    existing = conn.execute("select sort_order from supplement where user_id = %s and id = %s",
+                            (user_id, supplement_id)).fetchone()
+    if existing is None:
+        live = conn.execute("select count(*) as n from supplement where user_id = %s and deleted_at is null",
+                            (user_id,)).fetchone()["n"]
+        if live >= MAX_SUPPLEMENTS:
+            raise InvalidFood(f"You can keep up to {MAX_SUPPLEMENTS} supplements.")
+    order = record.get("sort_order")
+    if not isinstance(order, int) or isinstance(order, bool):
+        order = existing["sort_order"] if existing else conn.execute(
+            "select coalesce(max(sort_order), -1) + 1 as next from supplement where user_id = %s",
+            (user_id,)).fetchone()["next"]
+    saved = _upsert(conn, "supplement",
+                    [{"user_id": user_id, "id": supplement_id, "name": name, "dose": dose,
+                      "schedule": Jsonb(schedule), "sort_order": order, "changed_at": moment(changed_at)}],
+                    ("user_id", "id"), update=("name", "dose", "schedule", "sort_order", "changed_at"))
+    return APPLIED if saved else _why_not(conn, "supplement", user_id, supplement_id)
+
+
+@_for_user
+def delete_supplement(conn: psycopg.Connection, user_id: str, supplement_id: str, at: datetime) -> str:
+    """Stops showing it. Days you ticked it stay saved."""
+    return APPLIED if _soft_delete(conn, "supplement", user_id, [_id(supplement_id, "Supplement")],
+                                   moment(at)) else MISSING
+
+
+@_for_user
+def list_supplements(conn: psycopg.Connection, user_id: str) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        "select id, name, dose, schedule, sort_order, changed_at from supplement where user_id = %s and deleted_at is null "
+        "order by sort_order, lower(name)",
+        (user_id,),
+    ).fetchall()
+    return [{**r, "id": str(r["id"])} for r in rows]
+
+
+@_for_user
+def set_supplement_taken(conn: psycopg.Connection, user_id: str, supplement_id: str, day: date, taken: bool,
+                         changed_at: datetime) -> str:
+    """Tick a supplement off for a day, or untick it. The newest change wins."""
+    supplement_id = _id(supplement_id, "Supplement")
+    _flag(taken, "Taken")
+    row = conn.execute("select deleted_at from supplement where user_id = %s and id = %s",
+                       (user_id, supplement_id)).fetchone()
+    if row is None:
+        raise InvalidFood("That supplement isn't in your list.")
+    if row["deleted_at"] is not None:
+        return DELETED
+    saved = _upsert(conn, "supplement_taken",
+                    [{"user_id": user_id, "supplement_id": supplement_id, "local_date": day, "taken": taken,
+                      "changed_at": moment(changed_at)}],
+                    ("user_id", "supplement_id", "local_date"), update=("taken", "changed_at"), soft_delete=False)
+    return APPLIED if saved else STALE
+
+
+@_for_user
+def supplements_taken(conn: psycopg.Connection, user_id: str, start: date, end: date) -> dict[date, list[str]]:
+    """Which live supplements were ticked on each of these days."""
+    rows = conn.execute(
+        "select t.local_date, t.supplement_id from supplement_taken t "
+        "join supplement s on s.user_id = t.user_id and s.id = t.supplement_id "
+        "where t.user_id = %s and t.taken and s.deleted_at is null and t.local_date between %s and %s "
+        "order by s.sort_order, lower(s.name)",
+        (user_id, start, end),
+    ).fetchall()
+    by_day: dict[date, list[str]] = {}
+    for r in rows:
+        by_day.setdefault(r["local_date"], []).append(str(r["supplement_id"]))
+    return by_day
+
+
 # ---------------------------------------------------------------- settings
 
 DEFAULT_SETTINGS: dict[str, Any] = {

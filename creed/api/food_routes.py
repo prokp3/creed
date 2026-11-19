@@ -57,6 +57,7 @@ def library(session: Session, conn: Conn) -> dict[str, Any]:
             "nutrients": food.list_nutrients(conn, user),
             "foods": food.list_foods(conn, user, limit=5000),
             "presets": food.list_presets(conn, user),
+            "supplements": food.list_supplements(conn, user),
             "recent_food_ids": food.recent_food_ids(conn, user),
             "settings": _settings_out(food.get_settings(conn, user)),
             # Every target set, so the app can show the ones in force and edit them.
@@ -94,13 +95,18 @@ def day_screen(session: Session, conn: Conn, date_: Annotated[str | None, Query(
     burned = None
     if session["is_owner"]:
         burned = reads.metric_series(conn, ["calories_total"], day, day)["calories_total"].get(day)
+    # Ticks for the whole week (Monday to Sunday), so a few-times-a-week supplement can show how many so far.
+    monday = day - timedelta(days=day.weekday())
     with food.as_user(conn, user):
         sets = food.target_sets(conn, user)
+        week = food.supplements_taken(conn, user, monday, monday + timedelta(days=6))
         return food_day.day_view(
             day=day, today=today, entries=food.entries_between(conn, user, day, day),
             nutrients=food.list_nutrients(conn, user), day_type=kind, threshold_minutes=threshold,
             target_set=targets.targets_for(day, kind.day_type, sets), burned_kcal=burned,
             source_tag=config.source_label(),
+            supplements_taken=week.get(day, []),
+            supplements_week={d.isoformat(): ids for d, ids in week.items()},
         )
 
 
@@ -155,6 +161,10 @@ APPLY: dict[str, Callable[[psycopg.Connection, str, dict[str, Any]], Any]] = {
                                                       ch.get("targets") or {}, _when(ch)),
     "day_type.set": lambda c, u, ch: food.set_day_type(c, u, _date(ch.get("date")), ch.get("day_type"), _when(ch)),
     "settings.save": lambda c, u, ch: food.save_settings(c, u, ch.get("record") or {}, _when(ch)),
+    "supplement.save": lambda c, u, ch: food.save_supplement(c, u, ch.get("record") or {}, _when(ch)),
+    "supplement.delete": lambda c, u, ch: food.delete_supplement(c, u, ch.get("id"), _when(ch)),
+    "supplement.taken": lambda c, u, ch: food.set_supplement_taken(c, u, ch.get("supplement_id"),
+                                                                   _date(ch.get("date")), ch.get("taken"), _when(ch)),
 }
 
 

@@ -275,6 +275,79 @@ export function applyChanges(entries, changes) {
   return result;
 }
 
+// ---------------------------------------------------------------- supplements
+
+const SHORT_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const LONG_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+/** 0 for Monday to 6 for Sunday, as the server counts. */
+export function weekday(isoDate) {
+  const [year, month, day] = isoDate.split('-').map(Number);
+  return (new Date(year, month - 1, day).getDay() + 6) % 7;
+}
+
+/** The Monday of the week a day is in. */
+export function weekStart(isoDate) {
+  return addDays(isoDate, -weekday(isoDate));
+}
+
+/** How often, in words: Every day, Weekdays, Mon, Wed, Fri, Mondays, Twice a week. */
+export function scheduleText(schedule) {
+  if (!schedule || schedule.kind === 'daily') return 'Every day';
+  if (schedule.kind === 'weekly') {
+    return { 1: 'Once a week', 2: 'Twice a week' }[schedule.times] ?? `${schedule.times} times a week`;
+  }
+  const days = schedule.days.join();
+  if (days === '0,1,2,3,4') return 'Weekdays';
+  if (days === '5,6') return 'Weekends';
+  if (schedule.days.length === 1) return `${LONG_DAYS[schedule.days[0]]}s`;
+  return schedule.days.map((d) => SHORT_DAYS[d]).join(', ');
+}
+
+/**
+ * Supplements for one day. `week` is what the server sent: the ids ticked on each day of that day's week. Ticks
+ * still on their way are laid over it.
+ *   - Every day: always due.
+ *   - Certain days: due on those days. On others it waits in `notDue`, unless you ticked it anyway.
+ *   - A few times a week: due until ticked that many times in the week (Monday to Sunday), then shown as done.
+ * Returns { items, notDue, due, done }: `due` and `done` count only what's due that day.
+ */
+export function supplementsDay(supplements, week, changes, date) {
+  const first = weekStart(date);
+  const last = addDays(first, 6);
+  const ticked = new Map(Object.entries(week ?? {}).map(([day, ids]) => [day, new Set(ids)]));
+  for (const change of changes) {
+    if (change.kind !== 'supplement-taken' || change.date < first || change.date > last) continue;
+    if (!ticked.has(change.date)) ticked.set(change.date, new Set());
+    if (change.taken) ticked.get(change.date).add(change.id);
+    else ticked.get(change.date).delete(change.id);
+  }
+  const that = ticked.get(date) ?? new Set();
+  const items = [];
+  const notDue = [];
+  for (const supplement of supplements ?? []) {
+    const schedule = supplement.schedule ?? { kind: 'daily' };
+    const taken = that.has(supplement.id);
+    const often = scheduleText(schedule);
+    let due = true;
+    let note = schedule.kind === 'daily' ? '' : often;
+    if (schedule.kind === 'days') {
+      due = schedule.days.includes(weekday(date));
+      if (!due && !taken) {
+        notDue.push({ ...supplement, taken, due, note });
+        continue;
+      }
+    } else if (schedule.kind === 'weekly') {
+      const count = [...ticked.entries()].filter(([day, ids]) => day >= first && day <= last && ids.has(supplement.id)).length;
+      due = taken || count < schedule.times;
+      note = due ? `${count} of ${schedule.times} this week` : `Done this week · ${count} of ${schedule.times}`;
+    }
+    items.push({ ...supplement, taken, due, note });
+  }
+  const dueItems = items.filter((i) => i.due);
+  return { items, notDue, due: dueItems.length, done: dueItems.filter((i) => i.taken).length };
+}
+
 const byTime = (a, b) => Date.parse(a.logged_at) - Date.parse(b.logged_at) || (a.id < b.id ? -1 : 1);
 
 /** Entries logged together (one preset tap, or one quick add) are a meal, in order of the meal's first entry. */
@@ -408,6 +481,8 @@ function upsert(list, record) {
 export function applyLibraryChanges(library, changes) {
   if (!library) return library;
   let { foods, presets, targets, nutrients, settings } = library;
+  // A library kept on the phone from before supplements existed has none.
+  let supplements = library.supplements ?? [];
   for (const change of changes) {
     if (change.kind === 'food-save') foods = upsert(foods, change.record);
     else if (change.kind === 'food-delete') {
@@ -427,6 +502,8 @@ export function applyLibraryChanges(library, changes) {
     } else if (change.kind === 'nutrient-save') nutrients = upsert(nutrients, change.record);
     else if (change.kind === 'nutrient-delete') nutrients = nutrients.filter((n) => n.id !== change.id);
     else if (change.kind === 'settings-save') settings = { ...settings, ...change.record };
+    else if (change.kind === 'supplement-save') supplements = upsert(supplements, change.record);
+    else if (change.kind === 'supplement-delete') supplements = supplements.filter((s) => s.id !== change.id);
   }
   return {
     ...library,
@@ -435,6 +512,7 @@ export function applyLibraryChanges(library, changes) {
     targets,
     nutrients: [...nutrients].sort(byOrder),
     settings,
+    supplements: [...supplements].sort(byOrder),
   };
 }
 

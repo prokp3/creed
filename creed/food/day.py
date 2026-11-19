@@ -52,7 +52,9 @@ def rings(nutrients: Sequence[Mapping[str, Any]], totals: nutrition.Totals,
 
 def day_view(*, day: date, today: date, entries: Sequence[Mapping[str, Any]], nutrients: Sequence[Mapping[str, Any]],
              day_type: DayType, threshold_minutes: float, target_set: TargetSet | None,
-             burned_kcal: float | None, source_tag: str = "Garmin") -> dict[str, Any]:
+             burned_kcal: float | None, source_tag: str = "Garmin",
+             supplements_taken: Sequence[str] = (),
+             supplements_week: Mapping[str, Sequence[str]] | None = None) -> dict[str, Any]:
     ids = [n["id"] for n in nutrients]
     totals = nutrition.totals(entries, ids)
     eaten = totals.values.get("kcal", 0.0)
@@ -66,6 +68,10 @@ def day_view(*, day: date, today: date, entries: Sequence[Mapping[str, Any]], nu
         "incomplete": sorted(totals.incomplete),
         "rings": rings(nutrients, totals, target_set),
         "meals": meals(entries),
+        # Ids of the supplements ticked off that day. Logged by day, not by time.
+        "supplements_taken": list(supplements_taken),
+        # The same for each day of that day's week, Monday to Sunday (days with none left out).
+        "supplements_week": {d: list(ids) for d, ids in (supplements_week or {}).items()},
         "balance": {
             "tag": source_tag,
             "estimate": True,

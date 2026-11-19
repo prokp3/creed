@@ -18,6 +18,10 @@ import {
   mealSummary,
   meals,
   newId,
+  scheduleText,
+  supplementsDay,
+  weekStart,
+  weekday,
   oneOffEntry,
   presetEntries,
   presetFromMeal,
@@ -375,5 +379,84 @@ describe('barcodes', () => {
     expect(checkDigitOk('3017620422004')).toBe(false);
     expect(checkDigitOk('96385074')).toBe(true);
     expect(checkDigitOk('123456')).toBe(true); // No check digit to test.
+  });
+});
+
+describe('supplements', () => {
+  const list = [
+    { id: 'a', name: 'Omega-3', dose: '1 capsule', sort_order: 0 },
+    { id: 'b', name: 'Vitamin D3', dose: null, sort_order: 1 },
+  ];
+
+  // 2026-11-19 is a Thursday; its week runs Monday 16 to Sunday 22.
+  const THU = '2026-11-19';
+
+  it('counts weeks from Monday', () => {
+    expect(weekday('2026-11-16')).toBe(0);
+    expect(weekday('2026-11-22')).toBe(6);
+    expect(weekStart(THU)).toBe('2026-11-16');
+    expect(weekStart('2026-11-16')).toBe('2026-11-16');
+  });
+
+  it('says how often in words', () => {
+    expect(scheduleText(undefined)).toBe('Every day');
+    expect(scheduleText({ kind: 'days', days: [0, 1, 2, 3, 4] })).toBe('Weekdays');
+    expect(scheduleText({ kind: 'days', days: [5, 6] })).toBe('Weekends');
+    expect(scheduleText({ kind: 'days', days: [0] })).toBe('Mondays');
+    expect(scheduleText({ kind: 'days', days: [0, 2, 4] })).toBe('Mon, Wed, Fri');
+    expect(scheduleText({ kind: 'weekly', times: 1 })).toBe('Once a week');
+    expect(scheduleText({ kind: 'weekly', times: 3 })).toBe('3 times a week');
+  });
+
+  it('lays ticks on their way over what the server sent, for that day only', () => {
+    const changes = [
+      { kind: 'supplement-taken', date: THU, id: 'b', taken: true },
+      { kind: 'supplement-taken', date: '2026-11-18', id: 'a', taken: true },
+      { kind: 'supplement-taken', date: THU, id: 'a', taken: false },
+    ];
+    const day = supplementsDay(list, { [THU]: ['a'] }, changes, THU);
+    expect(day.items.map((i) => [i.id, i.taken])).toEqual([['a', false], ['b', true]]);
+    expect([day.done, day.due]).toEqual([1, 2]);
+    expect(supplementsDay(list, {}, changes, '2026-11-18').items.find((i) => i.id === 'a').taken).toBe(true);
+  });
+
+  it('keeps a certain-days one aside on other days, unless ticked anyway', () => {
+    const iron = { id: 'i', name: 'Iron', sort_order: 2, schedule: { kind: 'days', days: [0, 3] } };
+    expect(supplementsDay([...list, iron], {}, [], THU).items.find((i) => i.id === 'i').note).toBe('Mon, Thu');
+    const fri = supplementsDay([...list, iron], {}, [], '2026-11-20');
+    expect(fri.notDue.map((i) => i.id)).toEqual(['i']);
+    expect(fri.due).toBe(2);
+    const ticked = supplementsDay([...list, iron], { '2026-11-20': ['i'] }, [], '2026-11-20');
+    expect(ticked.items.find((i) => i.id === 'i')).toMatchObject({ taken: true, due: false });
+    expect([ticked.done, ticked.due]).toEqual([0, 2]);
+  });
+
+  it('counts a few-times-a-week one across its week, then shows it done', () => {
+    const fish = { id: 'f', name: 'Fish oil', sort_order: 0, schedule: { kind: 'weekly', times: 2 } };
+    const week = { '2026-11-15': ['f'], '2026-11-16': ['f'] }; // Sunday before doesn't count.
+    let day = supplementsDay([fish], week, [], THU);
+    expect(day.items[0]).toMatchObject({ due: true, taken: false, note: '1 of 2 this week' });
+    const tickTue = { kind: 'supplement-taken', date: '2026-11-17', id: 'f', taken: true };
+    day = supplementsDay([fish], week, [tickTue], THU);
+    expect(day.items[0]).toMatchObject({ due: false, note: 'Done this week · 2 of 2' });
+    expect(day.due).toBe(0);
+    day = supplementsDay([fish], week, [{ ...tickTue, date: THU }], THU);
+    expect(day.items[0]).toMatchObject({ due: true, taken: true, note: '2 of 2 this week' });
+  });
+
+  it('counts only supplements still in the list, in its order', () => {
+    expect(supplementsDay(list, { [THU]: ['b', 'gone', 'a'] }, [], THU).items.map((i) => i.taken)).toEqual([true, true]);
+    expect(supplementsDay(undefined, undefined, [], THU)).toEqual({ items: [], notDue: [], due: 0, done: 0 });
+  });
+
+  it('adds, edits and removes them in the library, even one kept from before they existed', () => {
+    const old = { foods: [], presets: [], targets: [], nutrients: [], settings: {} };
+    let lib = applyLibraryChanges(old, [{ kind: 'supplement-save', record: list[1] }, { kind: 'supplement-save', record: list[0] }]);
+    expect(lib.supplements.map((s) => s.name)).toEqual(['Omega-3', 'Vitamin D3']);
+    lib = applyLibraryChanges(lib, [
+      { kind: 'supplement-save', record: { ...list[0], dose: '2 capsules' } },
+      { kind: 'supplement-delete', id: 'b' },
+    ]);
+    expect(lib.supplements).toEqual([{ ...list[0], dose: '2 capsules' }]);
   });
 });

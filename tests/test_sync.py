@@ -406,6 +406,7 @@ class TestSchema:
         assert migrate(conn) == ["0001_init.sql", "0002_activity_derived.sql", "0003_auth.sql", "0004_users.sql",
                                  "0005_food.sql", "0006_food_seed.sql", "0007_food_settings_push.sql",
                                  "0008_notifications.sql", "0009_intervals_source.sql", "0010_food_profile.sql",
+                                 "0011_supplements.sql",
                                  "0012_widget_key.sql"]
         assert migrate(conn) == []
 

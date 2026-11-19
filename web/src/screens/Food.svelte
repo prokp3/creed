@@ -10,6 +10,7 @@
   import NutrientsSheet from '../components/NutrientsSheet.svelte';
   import PresetEditorSheet from '../components/PresetEditorSheet.svelte';
   import ScannerSheet from '../components/ScannerSheet.svelte';
+  import SupplementsSheet from '../components/SupplementsSheet.svelte';
   import TrendsSheet from '../components/TrendsSheet.svelte';
   import FoodRing from '../components/FoodRing.svelte';
   import Icon from '../components/Icon.svelte';
@@ -19,7 +20,7 @@
   import Screen from '../components/Screen.svelte';
   import TargetsSheet from '../components/TargetsSheet.svelte';
   import { addDays, amountText, at, clockText, localDate, mealSummary } from '../lib/food.js';
-  import { dayView, food as store, loadDay, loadLibrary, logPreset } from '../lib/food.svelte.js';
+  import { dayView, food as store, loadDay, loadLibrary, logPreset, setSupplementTaken } from '../lib/food.svelte.js';
   import { relativeDay } from '../lib/format.js';
 
   // `open` comes from the address, such as #/food/protein from a ring on Today.
@@ -36,6 +37,9 @@
   const bars = $derived(view.loaded ? view.progress.filter((p) => p.id !== 'kcal' && p.id !== 'protein') : []);
   const anyIncomplete = $derived(view.loaded && view.progress.some((p) => p.incomplete));
   const openMeal = $derived(sheet?.kind === 'meal' && view.loaded ? view.meals.find((m) => m.group_id === sheet.groupId) : null);
+  const supplementDay = $derived(view.loaded ? view.supplementDay : { items: [], notDue: [], due: 0, done: 0 });
+  const hasSupplements = $derived(supplementDay.items.length + supplementDay.notDue.length > 0);
+  let showNotDue = $state(false);
   const openNutrient = $derived(sheet?.kind === 'nutrient' && view.loaded ? view.progress.find((p) => p.id === sheet.id) : null);
 
   $effect(() => {
@@ -110,6 +114,26 @@
   const colorOf = (id) => (id === 'protein' ? 'var(--protein)' : 'var(--ink)');
   const kcal = (values) => (values.kcal === undefined ? '—' : `${amountText(values.kcal, 'kcal')} kcal`);
 </script>
+
+{#snippet supplementRow(item)}
+  <button
+    type="button"
+    class="supplement pressable"
+    class:resting={!item.due && !item.taken}
+    role="checkbox"
+    aria-checked={item.taken}
+    aria-label={[item.name, item.dose, item.note].filter(Boolean).join(', ')}
+    onclick={() => setSupplementTaken(date, item, !item.taken)}
+  >
+    <span class="check" class:done={item.taken} aria-hidden="true">
+      {#if item.taken}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>{/if}
+    </span>
+    <span class="supplement-text">
+      <span class="supplement-name" class:faded={item.taken}>{item.name}</span>
+      {#if item.dose || item.note}<span class="meal-note">{[item.dose, item.note].filter(Boolean).join(' · ')}</span>{/if}
+    </span>
+  </button>
+{/snippet}
 
 <Screen {active}>
   {#snippet overlay()}
@@ -214,6 +238,38 @@
       {/if}
     </section>
 
+    <section class="gutter stack">
+      <div class="section-top">
+        <h2 class="section-heading">
+          Supplements{#if supplementDay.due}<span class="count">{` · ${supplementDay.done} of ${supplementDay.due}`}</span>{/if}
+        </h2>
+        <button type="button" class="text-button" onclick={() => (sheet = { kind: 'supplements' })}>{hasSupplements ? 'Edit' : 'Add'}</button>
+      </div>
+      {#if hasSupplements}
+        {#if supplementDay.items.length}
+          <div class="list">
+            {#each supplementDay.items as item (item.id)}
+              {@render supplementRow(item)}
+            {/each}
+          </div>
+        {/if}
+        {#if supplementDay.notDue.length}
+          <button type="button" class="text-button not-due" aria-expanded={showNotDue} onclick={() => (showNotDue = !showNotDue)}>
+            Not due {view.isToday ? 'today' : 'this day'}: {supplementDay.notDue.map((s) => s.name).join(', ')} · {showNotDue ? 'Hide' : 'Show'}
+          </button>
+          {#if showNotDue}
+            <div class="list">
+              {#each supplementDay.notDue as item (item.id)}
+                {@render supplementRow(item)}
+              {/each}
+            </div>
+          {/if}
+        {/if}
+      {:else}
+        <p class="note">Add what you take, like omega-3 or vitamin D, and how often. Then tick each one off on the days you take it.</p>
+      {/if}
+    </section>
+
     <section class="gutter stack meals-section">
       <h2 class="section-heading">{view.isToday ? "Today's meals" : 'Meals'}</h2>
       {#if view.meals.length}
@@ -285,6 +341,8 @@
   {#key sheet}
     <PresetEditorSheet preset={sheet.preset ?? null} copy={sheet.copy ?? false} onclose={close} onback={() => (sheet = { kind: 'presets' })} />
   {/key}
+{:else if sheet?.kind === 'supplements'}
+  <SupplementsSheet onclose={close} />
 {:else if sheet?.kind === 'trends'}
   <TrendsSheet onclose={close} />
 {:else if sheet?.kind === 'settings'}
@@ -499,6 +557,78 @@
     letter-spacing: 0.05em;
     text-transform: uppercase;
     white-space: nowrap;
+  }
+
+  .count {
+    color: var(--ink-3);
+  }
+
+  .supplement {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    min-height: 56px;
+    padding: 8px 14px;
+    border: 0;
+    background: transparent;
+    text-align: left;
+  }
+
+  .supplement + .supplement {
+    border-top: 1px solid var(--line);
+  }
+
+  .check {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border: 2px solid var(--border);
+    border-radius: 13px;
+    color: var(--bg);
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+
+  .check.done {
+    border-color: var(--ink);
+    background: var(--ink);
+  }
+
+  .supplement-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .supplement-name {
+    font: 700 17px/1.1 var(--display);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    transition: color 0.15s ease;
+  }
+
+  .supplement-name.faded {
+    color: var(--ink-2);
+  }
+
+  /* Done for the week, or not due that day: still tappable, but quieter. */
+  .supplement.resting .supplement-name {
+    color: var(--ink-3);
+  }
+
+  .supplement.resting .check {
+    border-color: var(--track);
+  }
+
+  .not-due {
+    align-self: flex-start;
+    margin-left: -4px;
+    font-size: 13px;
+    text-align: left;
   }
 
   /* Room at the bottom so the add button never covers the last row. */
