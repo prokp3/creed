@@ -1,11 +1,12 @@
 <script>
   // A plain single-page app. Each tab stays mounted once visited, so it keeps its place and opens instantly.
   // None of it exists until you're signed in, and signing out removes it, numbers included.
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { auth, checkAuth } from './lib/auth.svelte.js';
   import { changeScreen, motionBetween } from './lib/motion.js';
   import { refreshRace } from './lib/race.svelte.js';
   import { flush as sendWaitingFood, startFood } from './lib/food.svelte.js';
+  import { sync, syncOnOpen } from './lib/sync.svelte.js';
   import Today from './screens/Today.svelte';
   import InDepth from './screens/InDepth.svelte';
   import Activities from './screens/Activities.svelte';
@@ -64,7 +65,18 @@
     if (auth.status === 'signed-in') {
       refreshRace();
       startFood();
+      // untrack: the sync's own state changing mustn't run this again and start another.
+      untrack(syncOnOpen);
     }
+  });
+
+  // When a sync ends, whether tapped or started as the app opened, every screen reloads its numbers.
+  let seenSyncs = 0;
+  $effect(() => {
+    if (sync.finished === seenSyncs) return;
+    seenSyncs = sync.finished;
+    untrack(() => (freshness += 1));
+    refreshRace();
   });
 </script>
 

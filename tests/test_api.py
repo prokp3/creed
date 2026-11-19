@@ -461,3 +461,57 @@ class TestSyncNow:
         response = client.post("/api/sync", headers=AUTH)
         assert response.status_code == 200
         assert response.json()["status"] == "auth_failed"
+
+
+class TestSyncOnOpen:
+    """Opening the app syncs on its own, unless a sync is running or one finished a few minutes ago."""
+
+    @pytest.fixture
+    def garmin(self, monkeypatch):
+        with MockGarmin(TODAY, history_days=20) as server:
+            monkeypatch.setenv("GARMIN_PERSONAL_API_BASE_URL", server.url)
+            monkeypatch.setenv("GARMIN_PERSONAL_API_KEY", GOOD_KEY)
+            monkeypatch.setattr(Client.__init__, "__kwdefaults__", {**Client.__init__.__kwdefaults__, "delay": 0})
+            yield server
+
+    def test_needs_a_session(self, client):
+        assert client.post("/api/sync/open").status_code == 401
+
+    def test_syncs_when_nothing_is_recent(self, client, store, garmin):
+        body = client.post("/api/sync/open", headers=AUTH).json()
+        assert body["status"] == "ok"
+        assert body["sync"]["latest_run"]["trigger"] == "open"
+        assert set(body) == {"status", "sync"}
+        store.commit()
+
+    def test_skips_the_source_right_after_a_sync(self, client, store, garmin):
+        assert client.post("/api/sync/open", headers=AUTH).json()["status"] == "ok"
+        body = client.post("/api/sync/open", headers=AUTH).json()
+        assert body["status"] == "fresh"
+        assert store.conn.execute("select count(*) as n from sync_run").fetchone()["n"] == 1
+        store.commit()
+
+    def test_syncs_again_once_the_last_one_is_old(self, client, store, garmin):
+        client.post("/api/sync/open", headers=AUTH)
+        store.conn.execute("update sync_run set finished_at = now() - interval '11 minutes'")
+        store.commit()
+        assert client.post("/api/sync/open", headers=AUTH).json()["status"] == "ok"
+
+    def test_retries_straight_after_a_failure(self, client, store, garmin):
+        run_id = store.start_run("cron")
+        store.finish_run(run_id, status="failed", requests=0, records=0, backfill_pending=False, message="down",
+                         details={})
+        store.commit()
+        assert client.post("/api/sync/open", headers=AUTH).json()["status"] == "ok"
+
+    def test_does_not_start_a_second_one_while_one_runs(self, client, store, garmin):
+        store.start_run("cron")
+        store.commit()
+        response = client.post("/api/sync/open", headers=AUTH)
+        assert response.status_code == 200
+        assert response.json()["status"] == "running"
+
+    def test_skips_cleanly_with_no_watch(self, client, store, monkeypatch):
+        monkeypatch.setenv("CREED_DATA_SOURCE", "none")
+        assert client.post("/api/sync/open", headers=AUTH).json()["status"] == "skipped"
+        assert store.conn.execute("select count(*) as n from sync_run").fetchone()["n"] == 0

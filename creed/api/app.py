@@ -44,6 +44,8 @@ SYNC_MAX_REQUESTS = 150
 INTERVALS_MAX_REQUESTS = 400
 # A run that started this recently and hasn't finished is still going. Longer than any run can last.
 SYNC_RUNNING_MINUTES = 6
+# Opening the app skips the sync if one finished cleanly this recently.
+OPEN_SYNC_FRESH_MINUTES = 10
 GARMIN_DAILY = ["body_battery_latest", "body_battery_max", "body_battery_min", "body_battery_charged",
                 "body_battery_drained", "stress_avg", "stress_qualifier", "hrv_status", "hrv_last_night_avg",
                 "hrv_weekly_avg", "hrv_balanced_low", "hrv_balanced_high", "resting_hr", "steps",
@@ -398,5 +400,21 @@ def sync_now(_: OwnerSession, conn: Conn) -> dict[str, Any]:
         raise HTTPException(status_code=409, detail="A sync is already running. Try again in a minute.")
     result = _sync(conn, "manual")
     # What this sync brought in is on screen now, so it isn't sent as a notification later.
+    _training_notifications(conn, "manual")
+    return {"status": result["status"], "sync": _sync_status(conn)}
+
+
+@app.post("/api/sync/open")
+def sync_on_open(_: OwnerSession, conn: Conn) -> dict[str, Any]:
+    """Opening the app syncs on its own. It skips the source when a sync is already running or one finished in the
+    last few minutes, so opening the app again and again doesn't use up the source's request allowance."""
+    if config.data_source() == config.NONE:
+        return {"status": "skipped", "sync": _sync_status(conn)}
+    if reads.sync_running(conn, SYNC_RUNNING_MINUTES):
+        return {"status": "running", "sync": _sync_status(conn)}
+    if reads.synced_within(conn, OPEN_SYNC_FRESH_MINUTES):
+        return {"status": "fresh", "sync": _sync_status(conn)}
+    result = _sync(conn, "open")
+    # Like Sync now, what this brought in is about to be on screen, so it's marked seen rather than sent.
     _training_notifications(conn, "manual")
     return {"status": result["status"], "sync": _sync_status(conn)}

@@ -87,6 +87,15 @@ def sync_running(conn: psycopg.Connection, within_minutes: int) -> bool:
     ).fetchone()["running"]
 
 
+def synced_within(conn: psycopg.Connection, minutes: int) -> bool:
+    """Whether a sync finished cleanly this recently. Failed ones don't count, so a failure is retried next open."""
+    return conn.execute(
+        "select exists (select 1 from sync_run where status in ('ok', 'partial') "
+        "and trigger is distinct from 'export' and finished_at > now() - make_interval(mins => %s)) as fresh",
+        (minutes,),
+    ).fetchone()["fresh"]
+
+
 def last_good_run(conn: psycopg.Connection) -> datetime | None:
     row = conn.execute(
         "select max(finished_at) as finished_at from sync_run where status in ('ok', 'partial') "

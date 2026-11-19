@@ -19,10 +19,9 @@
     zonedClock,
     zonedDate,
   } from '../lib/format.js';
-  import { post } from '../lib/api.js';
   import { revealMs } from '../lib/motion.js';
-  import { refreshRace } from '../lib/race.svelte.js';
   import { resource } from '../lib/resource.svelte.js';
+  import { sync, syncNow } from '../lib/sync.svelte.js';
   import { slide } from 'svelte/transition';
 
   let { active, freshness } = $props();
@@ -39,25 +38,8 @@
   });
 
   let showHidden = $state(false);
-  let syncing = $state(false);
-  let syncProblem = $state(null);
-
-  // Pulls from the source straight away rather than waiting for the next scheduled sync.
-  async function syncNow() {
-    if (syncing) return;
-    syncing = true;
-    syncProblem = null;
-    try {
-      const result = await post('/api/sync');
-      if (['failed', 'auth_failed'].includes(result.status)) syncProblem = "The sync didn't work. Try again later.";
-      await res.load();
-      refreshRace();
-    } catch (failure) {
-      syncProblem = failure.message;
-    } finally {
-      syncing = false;
-    }
-  }
+  const syncing = $derived(sync.syncing);
+  const syncProblem = $derived(sync.problem);
 
   function ringText(ring) {
     if (ring.key === 'sleep') return { value: clock(ring.value), sub: `OF ${clock(ring.need_seconds)}` };
