@@ -4,6 +4,7 @@
   import Icon from '../components/Icon.svelte';
   import Screen from '../components/Screen.svelte';
   import SignInSettings from '../components/SignInSettings.svelte';
+  import WidgetSettings from '../components/WidgetSettings.svelte';
   import StatusNote from '../components/StatusNote.svelte';
   import { onMount } from 'svelte';
   import { put } from '../lib/api.js';
@@ -186,6 +187,8 @@
     </section>
 
     <AutoTargets />
+
+    <WidgetSettings {active} {freshness} timeZone={s.timezone} />
 
     <section class="gutter stack">
       <h2 class="section-heading">Load curve</h2>

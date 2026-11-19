@@ -665,7 +665,8 @@ class TestUpgrade:
         conn.commit()
 
         assert migrate(conn) == ["0004_users.sql", "0005_food.sql", "0006_food_seed.sql", "0007_food_settings_push.sql",
-                                 "0008_notifications.sql", "0009_intervals_source.sql", "0010_food_profile.sql"]
+                                 "0008_notifications.sql", "0009_intervals_source.sql", "0010_food_profile.sql",
+                                 "0012_widget_key.sql"]
         owner = conn.execute("select id, passkey_handle from app_user where is_owner").fetchone()
         assert owner["passkey_handle"] == "the-old-handle"
         for table in ("auth_credential", "auth_session", "auth_recovery_code"):

@@ -19,6 +19,7 @@ from creed.api.auth_routes import router as auth_router
 from creed.api.deps import Conn, OwnerSession
 from creed.api.food_routes import push_info, push_router
 from creed.api.food_routes import router as food_router
+from creed.api.widget_routes import router as widget_router
 from creed.db import push as db_push
 from creed.db import reads
 from creed.db.store import Store
@@ -94,6 +95,7 @@ def sign_in_not_configured(_request: Request, exc: auth.NotConfigured) -> JSONRe
 app.include_router(auth_router)
 app.include_router(food_router)
 app.include_router(push_router)
+app.include_router(widget_router)
 
 
 def _secret_matches(given: str | None, expected: str | None) -> bool:
