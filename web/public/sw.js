@@ -26,6 +26,10 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET' || url.origin !== self.location.origin || url.pathname.startsWith('/api/')) {
     return;
   }
+  // Vercel Analytics: its script has no hash in its name, so a saved copy would never update.
+  if (url.pathname.startsWith('/_vercel/')) {
+    return;
+  }
   // The public pages aren't part of the app: leave them to the network so they're never saved as the app's page.
   if (['/welcome', '/try', '/feedback'].some((page) => url.pathname.startsWith(page))) {
     return;

@@ -8,6 +8,9 @@ import '@fontsource/barlow-condensed/700.css';
 import '../welcome/welcome.css';
 import '../feedback/feedback.css';
 import './try.css';
+import { inject } from '@vercel/analytics';
+
+inject();
 
 const $ = (id) => document.getElementById(id);
 const form = $('try-form');
