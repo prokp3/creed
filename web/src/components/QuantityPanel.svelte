@@ -11,11 +11,28 @@
     nutrients,
     quantity = $bindable(),
     unit = $bindable(),
+    // When given, a food with no unit for how you eat it can get one here: (name, amount of the base) => void.
+    onaddunit = null,
   } = $props();
+
+  // Common ways food is measured. Each still needs its weight, since a katori of rice and of dal differ.
+  const SUGGESTED = ['piece', 'katori', 'bowl', 'cup', 'plate', 'slice', 'tbsp', 'tsp', 'scoop', 'glass', 'serving', 'handful'];
+  let adding = $state(false);
+  let newName = $state('');
+  let newAmount = $state('');
+  let addProblem = $state('');
 
   let typed = $state(String(number(quantity)).replaceAll(',', ''));
 
-  const amount = $derived(Number.isFinite(quantity) && quantity > 0 ? baseAmount(quantity, unit, base, units) : null);
+  // A unit just added reaches `units` a moment after `unit`, so an unknown unit reads as no amount yet.
+  const amount = $derived.by(() => {
+    if (!(Number.isFinite(quantity) && quantity > 0)) return null;
+    try {
+      return baseAmount(quantity, unit, base, units);
+    } catch {
+      return null;
+    }
+  });
   const values = $derived(amount === null ? {} : scale(per100, amount));
   const MAIN = ['kcal', 'protein', 'carbs', 'fat', 'sodium'];
   const nutrientById = $derived(new Map(nutrients.map((n) => [n.id, n])));
@@ -45,6 +62,30 @@
     setQuantity(valid ? convertQuantity(quantity, before, next, base, units) : startingQuantity(next, base));
   }
 
+  function addUnit() {
+    const name = newName.trim();
+    const grams = Number(String(newAmount).trim().replace(',', '.'));
+    if (!name || name.length > 20) {
+      addProblem = 'Give the unit a name of up to 20 characters.';
+      return;
+    }
+    if (name === 'g' || name === 'ml' || unitOptions.includes(name)) {
+      addProblem = `This food can already be measured in ${name}.`;
+      return;
+    }
+    if (!(grams > 0) || grams > 100000) {
+      addProblem = `Say how many ${base} one ${name} is.`;
+      return;
+    }
+    onaddunit(name, grams);
+    unit = name;
+    setQuantity(1);
+    adding = false;
+    newName = '';
+    newAmount = '';
+    addProblem = '';
+  }
+
   const unitLabel = (u) => (u === base ? (base === 'g' ? 'Grams' : 'ml') : `${u} · ${number(units[u])} ${base}`);
   const show = (id) => {
     const n = nutrientById.get(id);
@@ -67,11 +108,33 @@
   </button>
 </div>
 
-{#if unitOptions.length > 1}
-  <div class="units" class:wrap={unitOptions.length > 2} role="group" aria-label="Unit">
+{#if unitOptions.length > 1 || onaddunit}
+  <div class="units" class:wrap={unitOptions.length + (onaddunit ? 1 : 0) > 2} role="group" aria-label="Unit">
     {#each unitOptions as option (option)}
       <button type="button" class="unit pressable" aria-pressed={option === unit} onclick={() => chooseUnit(option)}>{unitLabel(option)}</button>
     {/each}
+    {#if onaddunit}
+      <button type="button" class="unit add-unit pressable" aria-expanded={adding} onclick={() => (adding = !adding)}>+ Add a unit</button>
+    {/if}
+  </div>
+{/if}
+
+{#if adding}
+  <div class="new-unit">
+    <div class="suggestions" role="group" aria-label="Common units">
+      {#each SUGGESTED.filter((u) => !unitOptions.includes(u)) as u (u)}
+        <button type="button" class="suggestion pressable" aria-pressed={newName === u} onclick={() => (newName = u)}>{u}</button>
+      {/each}
+    </div>
+    <div class="new-row">
+      <input class="field name" type="text" maxlength="20" placeholder="Unit, such as piece" aria-label="Unit name" bind:value={newName} />
+      <span class="equals">=</span>
+      <input class="field amount" type="text" inputmode="decimal" placeholder="50" aria-label="How many {base} one is" bind:value={newAmount} />
+      <span class="base">{base}</span>
+    </div>
+    <p class="note">Weigh one if you can. It's saved to this food, so it's there next time.</p>
+    {#if addProblem}<p class="note attention" role="alert">{addProblem}</p>{/if}
+    <button type="button" class="secondary-button pressable" onclick={addUnit}>Add {newName.trim() || 'unit'}</button>
   </div>
 {/if}
 
@@ -176,6 +239,63 @@
   .unit[aria-pressed='true'] {
     background: var(--ink);
     color: var(--bg);
+  }
+
+  .add-unit {
+    color: var(--ink);
+  }
+
+  .new-unit {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+    border-radius: 14px;
+    background: var(--card);
+  }
+
+  .suggestions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .suggestion {
+    min-height: 36px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    background: transparent;
+    color: var(--ink-2);
+    font: 600 14px/1 var(--body);
+  }
+
+  .suggestion[aria-pressed='true'] {
+    border-color: var(--ink);
+    background: var(--ink);
+    color: var(--bg);
+  }
+
+  .new-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .new-row .name {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .new-row .amount {
+    width: 72px;
+    text-align: right;
+  }
+
+  .equals,
+  .base {
+    font-size: 13px;
+    color: var(--ink-3);
   }
 
   .values {

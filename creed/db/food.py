@@ -672,6 +672,8 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "reminder_times": [],
     "reminder_gap_minutes": 180,
     "timezone": "Asia/Kolkata",
+    # Body details for auto food targets (creed/food/profile.py). Empty until filled in.
+    "profile": {},
 }
 
 
@@ -679,7 +681,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
 def get_settings(conn: psycopg.Connection, user_id: str) -> dict[str, Any]:
     """This person's food settings, with the defaults for anything never changed."""
     row = conn.execute(
-        "select training_minutes, reminders_on, reminder_times, reminder_gap_minutes, timezone, changed_at "
+        "select training_minutes, reminders_on, reminder_times, reminder_gap_minutes, timezone, profile, changed_at "
         "from food_setting where user_id = %s", (user_id,)).fetchone()
     return {**DEFAULT_SETTINGS, "changed_at": None, **(dict(row) if row else {})}
 
@@ -687,7 +689,7 @@ def get_settings(conn: psycopg.Connection, user_id: str) -> dict[str, Any]:
 @_for_user
 def save_settings(conn: psycopg.Connection, user_id: str, record: Mapping[str, Any], changed_at: datetime) -> str:
     """Change any of the settings. Ones not mentioned keep their value."""
-    from creed.food import reminders
+    from creed.food import profile, reminders
 
     if not isinstance(record, Mapping):
         raise InvalidFood("Settings must be a list of values.")
@@ -702,6 +704,7 @@ def save_settings(conn: psycopg.Connection, user_id: str, record: Mapping[str, A
     _flag(merged["reminders_on"], "Reminders")
     merged["reminder_times"] = reminders.clean_times(merged["reminder_times"])
     reminders.zone(merged["timezone"])
+    merged["profile"] = Jsonb(profile.clean_profile(merged["profile"]))
     saved = _upsert(conn, "food_setting", [{"user_id": user_id, **merged, "changed_at": moment(changed_at)}],
                     ("user_id",), update=(*DEFAULT_SETTINGS, "changed_at"), soft_delete=False)
     return APPLIED if saved else STALE

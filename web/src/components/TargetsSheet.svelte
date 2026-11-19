@@ -68,6 +68,8 @@
     Leave a box empty for no target. {current && current.effective_from !== today ? `These have applied since ${shortDate(current.effective_from)}.` : ''}
   </p>
 
+  <a class="secondary-button auto pressable" href="#/settings" onclick={onclose}>Work them out from my height and weight</a>
+
   <button type="button" class="primary-button big pressable" disabled={!valid || saving} onclick={save}>
     Save {dayType === 'training' ? 'training' : 'rest'} day targets
   </button>
@@ -134,6 +136,13 @@
 
   .protein {
     color: var(--protein);
+  }
+
+  .auto {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
   }
 
   .big {

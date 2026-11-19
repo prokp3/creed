@@ -104,6 +104,28 @@ def day_screen(session: Session, conn: Conn, date_: Annotated[str | None, Query(
         )
 
 
+HINT_DAYS = 28
+
+
+@router.get("/training-hint")
+def training_hint(session: Session, conn: Conn) -> dict[str, Any]:
+    """A typical workout length for auto targets: the median training-day total over the last 4 weeks of Garmin
+    activities. Only the owner has Garmin data, so anyone else gets nothing to suggest."""
+    user = session["user_id"]
+    today = _today(conn)
+    threshold = food.get_settings(conn, user)["training_minutes"]
+    durations = food.activity_durations(conn, user, today - timedelta(days=HINT_DAYS - 1), today)
+    totals = sorted(
+        sum(s for s in day if s is not None) / 60 for day in durations.values()
+        if targets.detect(day, threshold)
+    )
+    if not totals:
+        return {"minutes": None, "training_days": 0, "days": HINT_DAYS}
+    middle = len(totals) // 2
+    median = totals[middle] if len(totals) % 2 else (totals[middle - 1] + totals[middle]) / 2
+    return {"minutes": round(median), "training_days": len(totals), "days": HINT_DAYS}
+
+
 def _when(change: dict[str, Any]) -> Any:
     if "changed_at" not in change:
         raise InvalidFood("Every change needs the time it was made.")

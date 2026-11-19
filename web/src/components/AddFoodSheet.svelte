@@ -19,7 +19,7 @@
     unitAmount,
     unitChoices,
   } from '../lib/food.js';
-  import { food as store, logEntries, toggleFavourite } from '../lib/food.svelte.js';
+  import { food as store, logEntries, saveFood, toggleFavourite } from '../lib/food.svelte.js';
   import { warmUp } from '../lib/scanner.js';
   import { onMount, untrack } from 'svelte';
 
@@ -59,6 +59,13 @@
     unit = item.default_unit;
     quantity = startingQuantity(unit, item.base);
     step = 'food';
+  }
+
+  // A new unit is saved to the food. If it was only ever logged in grams, the new unit becomes its usual one.
+  function addUnit(name, amount) {
+    const record = $state.snapshot(chosen);
+    const usual = record.default_unit === record.base ? name : record.default_unit;
+    saveFood({ ...record, units: { ...(record.units ?? {}), [name]: amount }, default_unit: usual }, `${name} added to ${record.name}`);
   }
 
   function perUnit(item) {
@@ -161,7 +168,7 @@
       </button>
     </div>
 
-    <QuantityPanel base={chosen.base} units={chosen.units} unitOptions={unitChoices(chosen)} per100={chosen.nutrients} {nutrients} bind:quantity bind:unit />
+    <QuantityPanel base={chosen.base} units={chosen.units} unitOptions={unitChoices(chosen)} per100={chosen.nutrients} {nutrients} onaddunit={addUnit} bind:quantity bind:unit />
 
     <div class="time-row">
       <span class="caption">Time</span>

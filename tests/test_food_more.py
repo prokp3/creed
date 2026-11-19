@@ -259,7 +259,7 @@ class TestSettings:
     def test_defaults_until_changed(self, owner):
         assert owner.get("/api/food/library").json()["settings"] == {
             "training_minutes": 20, "reminders_on": False, "reminder_times": [], "reminder_gap_minutes": 180,
-            "timezone": "Asia/Kolkata"}
+            "timezone": "Asia/Kolkata", "profile": {}}
 
     def test_a_change_keeps_the_rest(self, owner):
         [result] = send(owner, {"type": "settings.save", "changed_at": at(9), "record": {"training_minutes": 45}})

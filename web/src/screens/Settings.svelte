@@ -1,5 +1,6 @@
 <script>
   // Each change saves on its own, the way a phone's settings do. There's no Save button.
+  import AutoTargets from '../components/AutoTargets.svelte';
   import Icon from '../components/Icon.svelte';
   import Screen from '../components/Screen.svelte';
   import SignInSettings from '../components/SignInSettings.svelte';
@@ -183,6 +184,8 @@
         </div>
       </div>
     </section>
+
+    <AutoTargets />
 
     <section class="gutter stack">
       <h2 class="section-heading">Load curve</h2>
